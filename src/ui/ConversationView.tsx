@@ -11,11 +11,12 @@ import type { ScreeningResult } from "@/rules/types";
 import { EligibilityMapPanel } from "./EligibilityMapPanel";
 
 /** What the Resident sees of the conversation. Separate from what the model sees. */
-type Bubble = { speaker: "resident" | "benefitbridge"; text: string };
+type Bubble = { id: number; speaker: "resident" | "benefitbridge"; text: string };
 
 export function ConversationView() {
   const asOf = useRef(today());
   const conversation = useRef<ConversationState>(newConversation(asOf.current));
+  const nextBubbleId = useRef(0);
 
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [screening, setScreening] = useState<ScreeningResult>(conversation.current.screening);
@@ -34,25 +35,37 @@ export function ConversationView() {
     setBusy(true);
     setFailure(null);
     setDraft("");
-    setBubbles((current) => [...current, { speaker: "resident", text }, { speaker: "benefitbridge", text: "" }]);
+    setBubbles((current) => [...current, newBubble("resident", text)]);
 
     try {
       conversation.current = await sendResidentMessage(conversation.current, text, asOf.current, {
+        // The model speaks once before calling the tool and again after seeing
+        // the result, and those are two separate things to say. Each turn opens
+        // its own bubble; one that only calls the tool stays empty and is
+        // dropped at render, so nothing blank is left behind.
+        onAssistantTurnStart: () => {
+          const bubble = newBubble("benefitbridge", "");
+          setBubbles((current) => [...current, bubble]);
+        },
         onAssistantText: (delta) =>
-          setBubbles((current) => {
-            const next = [...current];
-            const last = next[next.length - 1]!;
-            next[next.length - 1] = { ...last, text: last.text + delta };
-            return next;
-          }),
+          setBubbles((current) =>
+            current.map((bubble, index) =>
+              index === current.length - 1 ? { ...bubble, text: bubble.text + delta } : bubble,
+            ),
+          ),
         onScreening: setScreening,
       });
     } catch (error) {
       setFailure(error instanceof Error ? error.message : "Something went wrong.");
-      setBubbles((current) => current.filter((bubble, index) => index !== current.length - 1 || bubble.text !== ""));
     } finally {
       setBusy(false);
     }
+  }
+
+  // Ids are minted outside the state updater: React invokes updaters more than
+  // once in development, so an updater that mutates anything is a bug.
+  function newBubble(speaker: Bubble["speaker"], text: string): Bubble {
+    return { id: nextBubbleId.current++, speaker, text };
   }
 
   return (
@@ -73,11 +86,19 @@ export function ConversationView() {
             </p>
           ) : null}
 
-          {bubbles.map((bubble, index) => (
-            <p key={index} className={`bubble bubble-${bubble.speaker}`}>
-              {bubble.text || (busy && index === bubbles.length - 1 ? "…" : "")}
+          {bubbles
+            .filter((bubble) => bubble.text !== "")
+            .map((bubble) => (
+              <p key={bubble.id} className={`bubble bubble-${bubble.speaker}`}>
+                {bubble.text}
+              </p>
+            ))}
+
+          {busy ? (
+            <p className="bubble bubble-benefitbridge thinking" aria-live="polite">
+              …
             </p>
-          ))}
+          ) : null}
 
           {failure ? <p className="failure">{failure}</p> : null}
           <div ref={transcriptEnd} />

@@ -42,6 +42,12 @@ export type ConversationState = {
 };
 
 export type TurnHandlers = {
+  /**
+   * A new assistant turn is starting. The model speaks once before calling the
+   * tool and again after seeing the result, and those are two separate things
+   * to say — without this the two runs of text arrive glued together.
+   */
+  onAssistantTurnStart: () => void;
   onAssistantText: (delta: string) => void;
   onScreening: (screening: ScreeningResult) => void;
 };
@@ -75,6 +81,8 @@ export async function sendResidentMessage(
   };
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    handlers.onAssistantTurnStart();
+
     const turn = await collectAssistantTurn(
       await callModel(next.messages, signal),
       handlers.onAssistantText,
