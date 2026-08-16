@@ -19,3 +19,16 @@ afterward — debugging happens live or not at all, and the golden-household fix
 the rules module are the only regression signal. A future reader looking for the logging
 that any comparable app would have will not find it, and adding it is a decision to be
 made deliberately rather than a gap to be filled.
+
+A Resident who closes the tab loses the Prefilled application along with everything else,
+so the only way to leave with the paperwork is to print or save it as a PDF from the
+browser — entirely on the device, no account, nothing transmitted. This limitation is
+worth stating to a Municipality rather than hiding: not keeping the data is what costs
+the Resident their copy.
+
+There is also no way to reload or replay a session, which means a conversation that goes
+wrong in front of an audience cannot be recovered. The fallback is a **golden-household
+fixture** loaded behind a URL parameter, skipping Elicitation and rendering the
+eligibility map directly. This is not a violation of the decision: what it holds is an
+invented household written by us as a test input, never a Resident's Household profile.
+The rule this ADR states is that *Resident* data is not retained — fixtures are code.

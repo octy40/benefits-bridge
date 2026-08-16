@@ -30,15 +30,18 @@ and the eligibility map says so rather than hiding the wait.
 _Avoid_: Closed, unavailable, pending
 
 **Keychain**:
-The private-sector and nonprofit discounts that qualifying for one means-tested Program
-unlocks — Lifeline, utility rate discounts, Museums for All, YMCA sliding scale. Named
-separately from Programs because nobody administers them together and Residents almost
-never claim them.
+The private-sector and nonprofit discounts a Resident's circumstances open up — Lifeline,
+utility rate discounts, Museums for All. Named separately from Programs because nobody
+administers them together and Residents almost never claim them, but the separation is
+administrative only: a Keychain entry is screened by the same rules, and most are reachable
+either through a means-tested Program or on income alone.
 _Avoid_: Perks, extras, secondary benefits
 
 **Eligibility map**:
-The results screen listing the Programs and Keychain entries a Resident is likely
-eligible for, each with an estimated dollar value and a headline annual total.
+The results screen listing the Programs and Keychain entries a Resident is likely eligible
+for. Entries BenefitBridge can put a defensible figure on carry one and sum into a headline
+annual total; the rest are listed beneath it with the reason there is no figure — coverage
+rather than cash, or a queue — never with a figure BenefitBridge cannot defend.
 _Avoid_: Results, dashboard, report
 
 **Household profile**:
@@ -54,6 +57,13 @@ Drawing the facts Screening needs out of an ordinary conversation, instead of as
 Resident to fill in a form. Which facts are worth asking for is determined by what the
 rules module is missing, not by a fixed script.
 _Avoid_: Intake, interview, questionnaire
+
+**Blocking fact**:
+A fact absent from the Household profile that stops Screening scoring at least one
+Program. Elicitation orders what to ask by how many Programs each one blocks, which is
+what makes the conversation short for a statable reason. Distinct from the fact behind
+**Indeterminate**, which is deliberately never required.
+_Avoid_: Question, field, gap, missing data
 
 **Prefilled application**:
 A specific Program's real application fields, rendered in BenefitBridge's own styling and
