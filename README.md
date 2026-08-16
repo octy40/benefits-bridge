@@ -21,6 +21,28 @@ npm run typecheck
 npm run build
 ```
 
+## Deploying
+
+```sh
+scripts/first-deploy.sh
+```
+
+The wizard walks the whole path: a hard monthly spend cap on the Anthropic
+workspace **before** anything is publicly reachable, a key created inside that
+capped workspace, the Vercel environment variable, a check that the key is
+absent from everything the browser is served, and only then the deploy.
+
+The order is the point. The proxy route is unauthenticated by design — "no app,
+no account" cannot have a login in front of it — so the cap is the only real
+ceiling on what a stranger can spend. The IP rate limit is friction, not a
+control (ADR-0012).
+
+```sh
+npm run build && npm run check:client-bundle   # re-runnable on its own
+```
+
+
+
 ## Where things are
 
 | Path | What it is |
