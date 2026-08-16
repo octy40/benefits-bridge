@@ -1,28 +1,21 @@
 import { createHash, randomBytes } from "node:crypto";
 
 /**
- * The only thing standing between an unauthenticated proxy route and someone
- * else's Anthropic bill.
- *
- * There is no login in front of the route and there never will be — "no app, no
- * account" cannot have one. So the route's protection is a hard spend cap on the
- * API key, which is the actual guarantee, and this, which is friction: enough to
- * stop a script from draining the cap in a minute, not enough to call security.
- *
- * It is deliberately a per-instance in-memory counter rather than a shared store.
- * A shared store would mean a database holding IP addresses, which is the thing
- * ADR-0005 says this product does not have. The cost is that the limit is per
- * running instance and resets on a cold start — see ADR-0012.
+ * Friction in front of an unauthenticated route. The hard spend cap on the API
+ * key is what actually bounds the bill; this only stops a script draining it in
+ * a minute, and is a per-instance in-memory counter rather than a shared store
+ * for the reason ADR-0012 gives.
  */
 
 /**
- * One Resident message can cost up to eight upstream requests, because the agent
- * loop runs a round per tool call (ADR-0008). Sixty a minute is therefore loose
- * on purpose: the Residents this is for share addresses — a library, a shelter,
- * a community centre behind one NAT — and a limit tight enough to be meaningful
- * against a script would lock out the room.
+ * Loose on purpose. Residents share addresses — a library, a shelter, a
+ * community centre behind one NAT — and one Resident message costs two or three
+ * upstream requests typically and up to eight in the worst case (ADR-0008). At
+ * 120 a minute a room of five Residents can each send a message every ten
+ * seconds before anyone is turned away. See ADR-0012 for why erring loose is
+ * the right side to err on.
  */
-export const PROXY_REQUESTS_PER_WINDOW = 60;
+export const PROXY_REQUESTS_PER_WINDOW = 120;
 export const PROXY_WINDOW_MS = 60_000;
 
 export type RateLimitDecision =
@@ -31,8 +24,8 @@ export type RateLimitDecision =
 
 export type RateLimiter = {
   check(key: string): RateLimitDecision;
-  /** How many clients are currently being counted. Bounded by traffic in one window. */
-  trackedClients(): number;
+  /** How many callers are currently counted. Bounded by traffic in two windows. */
+  trackedCallers(): number;
 };
 
 type Window = { count: number; startedAt: number };
@@ -41,16 +34,22 @@ export function createRateLimiter(options: {
   limit: number;
   windowMs: number;
   now?: () => number;
-  /** Expired entries are swept once the table grows past this. */
-  sweepAbove?: number;
 }): RateLimiter {
-  const { limit, windowMs, now = Date.now, sweepAbove = 1000 } = options;
+  const { limit, windowMs, now = Date.now } = options;
   const windows = new Map<string, Window>();
+  let lastSweptAt = now();
 
   return {
     check(key) {
       const at = now();
-      if (windows.size > sweepAbove) sweepExpired(windows, at, windowMs);
+
+      // Swept on a cadence rather than when the table gets big, so an entry's
+      // life is bounded by time — two windows at worst — instead of by how much
+      // other traffic happens to arrive. ADR-0012 rests on that bound.
+      if (at - lastSweptAt >= windowMs) {
+        sweepExpired(windows, at, windowMs);
+        lastSweptAt = at;
+      }
 
       const window = windows.get(key);
 
@@ -68,7 +67,7 @@ export function createRateLimiter(options: {
       return { allowed: true };
     },
 
-    trackedClients() {
+    trackedCallers() {
       return windows.size;
     },
   };
@@ -89,14 +88,14 @@ function sweepExpired(windows: Map<string, Window>, at: number, windowMs: number
 const SALT = randomBytes(16);
 
 /**
- * Identifies the client a request came from, without the address itself ever
+ * Identifies the caller a request came from, without the address itself ever
  * being what gets stored.
  *
  * Vercel overwrites `x-forwarded-for` at the edge and does not forward what the
- * client sent, so the value here is the real peer address and not something a
+ * caller sent, so the value here is the real peer address and not something a
  * caller can set to dodge the limit.
  */
-export function clientKey(headers: Headers): string {
+export function callerKey(headers: Headers): string {
   const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   const address = forwarded || headers.get("x-real-ip")?.trim() || "";
 

@@ -37,10 +37,8 @@ no account" cannot have a login in front of it — so the cap is the only real
 ceiling on what a stranger can spend. The IP rate limit is friction, not a
 control (ADR-0012).
 
-```sh
-npm run build && npm run check:client-bundle   # re-runnable on its own
-```
-
+`npm run build` runs the bundle check itself, so Vercel runs it on every deploy
+and a build that would ship the key fails instead.
 
 
 ## Where things are
@@ -49,7 +47,8 @@ npm run build && npm run check:client-bundle   # re-runnable on its own
 | --- | --- |
 | `src/rules/` | The rules module. Production code with tests — the only part built to last (ADR-0011). `screen()` is the single seam. |
 | `src/conversation/` | The agent loop, the facts tool, and the eligibility-map tool result. Runs in the browser (ADR-0008). |
-| `src/app/api/anthropic/` | The whole server: one stateless route holding the API key (ADR-0008), which writes nothing down (ADR-0005). |
+| `src/app/api/anthropic/` | The whole server: one route holding the API key (ADR-0008), which writes nothing down (ADR-0005). |
+| `src/proxy/` | The rate limiter in front of that route. The only state the server keeps between requests — a salted hash of the caller's address and a count, swept within two minutes (ADR-0012). |
 | `src/ui/` | Conversation and eligibility map. Renders from `ScreeningResult`, never from model text (ADR-0001). |
 
 Everything outside `src/rules/` is demo scaffolding, written to be discarded.

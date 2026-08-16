@@ -227,8 +227,13 @@ note "That's .env.local, which is gitignored — the key does not enter the repo
 # ── 3. Link the project ───────────────────────────────────────────────────
 stage "Vercel — link this directory to a project"
 if ! command -v vercel >/dev/null 2>&1; then
-  say "The Vercel CLI isn't installed. Installing it now:"
-  npm install -g vercel
+  say "The Vercel CLI isn't installed."
+  if confirm "Install it globally now (npm install -g vercel)?"; then
+    npm install -g vercel
+  else
+    note "Install it yourself and re-run: npm install -g vercel"
+    exit 1
+  fi
 fi
 say "A browser window will open for login if you aren't signed in already."
 vercel login || true
@@ -251,17 +256,15 @@ fi
 
 # ── 5. Prove the key is not in the bundle ─────────────────────────────────
 stage "Verify the key never reaches the browser"
-say "Building, then searching everything the browser is served for the key,"
-say "the key prefix, and the variable name."
+say "Building. The build searches everything the browser is served for the key,"
+say "the key prefix, and the variable name, and fails if it finds any of them."
 say ""
-if ! npm run build; then
-  warn "The build failed. Fix it before deploying."
-  exit 1
-fi
+say "Vercel runs this same build, so the check gates every later deploy too —"
+say "not just this one."
 say ""
-if ! ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" npm run check:client-bundle; then
-  warn "The key reached the client bundle. Do NOT deploy."
-  note "Find the client component or inlined value that pulled it in, then re-run."
+if ! ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" npm run build; then
+  warn "The build failed, or the key reached the browser. Do NOT deploy."
+  note "Read the output above, fix it, then re-run this wizard."
   exit 1
 fi
 
@@ -274,12 +277,26 @@ if ! confirm "Deploy to production now?"; then
   note "Nothing deployed. Re-run when you're ready: scripts/first-deploy.sh"
   exit 0
 fi
-vercel deploy --prod
 say ""
-step "Open the URL above and have a real conversation — send a message, watch"
-step "the reply stream, and check the eligibility map panel renders."
+DEPLOY_LOG=$(mktemp)
+vercel deploy --prod | tee "$DEPLOY_LOG"
+DEPLOY_URL=$(grep -Eo 'https://[^[:space:]]+' "$DEPLOY_LOG" | tail -n1 || true)
+rm -f "$DEPLOY_LOG"
+say ""
+if [[ -n "$DEPLOY_URL" ]]; then
+  open_url "$DEPLOY_URL"
+else
+  warn "Couldn't read the deployment URL from the output above — open it by hand."
+  ask DEPLOY_URL "Paste the deployment URL:"
+fi
+say ""
+step "Have a real conversation — send a message, watch the reply stream, and"
+step "check the eligibility map panel renders."
 step "Then refresh: the conversation should be gone (ADR-0005)."
 pause "Press Enter when you've confirmed it works end to end."
+say ""
+step "Record the URL on the ticket so the next person can find it:"
+note "  gh issue comment 14 --body 'Live at $DEPLOY_URL'"
 # ──────────────────────────────────────────────────────────────────────────
 
 finish

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientKey, createRateLimiter } from "./rate-limit";
+import { callerKey, createRateLimiter } from "./rate-limit";
 
 function fixedClock(start = 0) {
   let now = start;
@@ -12,7 +12,7 @@ function fixedClock(start = 0) {
 }
 
 describe("createRateLimiter", () => {
-  it("lets a client through up to the limit", () => {
+  it("lets a caller through up to the limit", () => {
     const limiter = createRateLimiter({ limit: 3, windowMs: 60_000, now: fixedClock().now });
 
     expect(limiter.check("a").allowed).toBe(true);
@@ -31,7 +31,7 @@ describe("createRateLimiter", () => {
     expect(limiter.check("a")).toEqual({ allowed: false, retryAfterSeconds: 45 });
   });
 
-  it("reports at least one second to retry, so a client is never told to retry immediately", () => {
+  it("reports at least one second to retry, so a caller is never told to retry immediately", () => {
     const clock = fixedClock();
     const limiter = createRateLimiter({ limit: 1, windowMs: 60_000, now: clock.now });
 
@@ -52,7 +52,7 @@ describe("createRateLimiter", () => {
     expect(limiter.check("a").allowed).toBe(true);
   });
 
-  it("counts each client separately, so one abuser does not lock out a Resident", () => {
+  it("counts each caller separately, so one abuser does not lock out a Resident", () => {
     const limiter = createRateLimiter({ limit: 1, windowMs: 60_000, now: fixedClock().now });
 
     limiter.check("abuser");
@@ -61,49 +61,68 @@ describe("createRateLimiter", () => {
     expect(limiter.check("resident").allowed).toBe(true);
   });
 
-  it("forgets clients whose window has passed, so memory does not grow without bound", () => {
+  it("is a fixed window, so a burst across the boundary beats the nominal rate", () => {
     const clock = fixedClock();
-    const limiter = createRateLimiter({
-      limit: 1,
-      windowMs: 60_000,
-      now: clock.now,
-      sweepAbove: 1,
-    });
+    const limiter = createRateLimiter({ limit: 3, windowMs: 60_000, now: clock.now });
+
+    limiter.check("a"); // opens the window; two of the three left
+
+    clock.advance(59_000);
+    const lateInTheWindow = [limiter.check("a"), limiter.check("a"), limiter.check("a")];
+
+    clock.advance(1_000); // the window rolls, and the budget is whole again
+    const earlyInTheNext = [limiter.check("a"), limiter.check("a"), limiter.check("a")];
+
+    const allowedInThatOneSecond =
+      lateInTheWindow.filter((d) => d.allowed).length +
+      earlyInTheNext.filter((d) => d.allowed).length;
+
+    // Five through in a single second, against a nominal three a minute. The
+    // spend cap is what bounds this, not the limiter (ADR-0012).
+    expect(allowedInThatOneSecond).toBe(5);
+  });
+
+  it("forgets a caller within two windows, whatever else the traffic is doing", () => {
+    const clock = fixedClock();
+    const limiter = createRateLimiter({ limit: 10, windowMs: 60_000, now: clock.now });
 
     limiter.check("a");
     limiter.check("b");
-    clock.advance(60_000);
+    expect(limiter.trackedCallers()).toBe(2);
+
+    // No size threshold to cross — only time passing, and one later request.
+    clock.advance(120_000);
     limiter.check("c");
 
-    expect(limiter.trackedClients()).toBe(1);
+    expect(limiter.trackedCallers()).toBe(1);
   });
 });
 
-describe("clientKey", () => {
+describe("callerKey", () => {
   it("derives a key from the address Vercel puts in x-forwarded-for", () => {
-    const key = clientKey(new Headers({ "x-forwarded-for": "203.0.113.7" }));
+    const key = callerKey(new Headers({ "x-forwarded-for": "203.0.113.7" }));
 
-    expect(key).toBe(clientKey(new Headers({ "x-forwarded-for": "203.0.113.7" })));
-    expect(key).not.toBe(clientKey(new Headers({ "x-forwarded-for": "203.0.113.8" })));
+    expect(key).toBe(callerKey(new Headers({ "x-forwarded-for": "203.0.113.7" })));
+    expect(key).not.toBe(callerKey(new Headers({ "x-forwarded-for": "203.0.113.8" })));
   });
 
   it("takes the leftmost address when the header carries a chain", () => {
-    expect(clientKey(new Headers({ "x-forwarded-for": "203.0.113.7, 198.51.100.1" }))).toBe(
-      clientKey(new Headers({ "x-forwarded-for": "203.0.113.7" })),
+    expect(callerKey(new Headers({ "x-forwarded-for": "203.0.113.7, 198.51.100.1" }))).toBe(
+      callerKey(new Headers({ "x-forwarded-for": "203.0.113.7" })),
     );
   });
 
   it("falls back to x-real-ip", () => {
-    expect(clientKey(new Headers({ "x-real-ip": "203.0.113.7" }))).toBe(
-      clientKey(new Headers({ "x-forwarded-for": "203.0.113.7" })),
+    expect(callerKey(new Headers({ "x-real-ip": "203.0.113.7" }))).toBe(
+      callerKey(new Headers({ "x-forwarded-for": "203.0.113.7" })),
     );
   });
 
   it("never contains the address itself, so no request holds an IP in memory", () => {
-    expect(clientKey(new Headers({ "x-forwarded-for": "203.0.113.7" }))).not.toContain("203.0.113.7");
+    expect(callerKey(new Headers({ "x-forwarded-for": "203.0.113.7" }))).not.toContain("203.0.113.7");
   });
 
   it("puts every request with no address in one bucket rather than letting them all through", () => {
-    expect(clientKey(new Headers())).toBe(clientKey(new Headers({ "x-forwarded-for": "  " })));
+    expect(callerKey(new Headers())).toBe(callerKey(new Headers({ "x-forwarded-for": "  " })));
   });
 });

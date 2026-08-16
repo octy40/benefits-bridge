@@ -10,17 +10,15 @@
  * is in transit through here and on to Anthropic under Anthropic's terms, and
  * nothing is assembled or kept on our side (ADR-0005).
  *
- * The one thing it does hold between requests is a rate-limit counter, keyed by
- * a salted hash of the caller's address and forgotten a minute later. Nothing of
- * the conversation is in it (ADR-0012).
+ * The one thing it holds between requests is a rate-limit counter: a salted
+ * hash of the caller's address and an integer, nothing of the conversation, and
+ * swept within two minutes (ADR-0012).
  *
- * There is no authentication here, by design: "no app, no account" cannot have a
- * login in front of it. What keeps an open route from becoming someone else's
- * bill is the hard spend cap on the API key, with the rate limit as friction.
+ * There is no authentication here, by design (ADR-0012).
  */
 
 import {
-  clientKey,
+  callerKey,
   createRateLimiter,
   PROXY_REQUESTS_PER_WINDOW,
   PROXY_WINDOW_MS,
@@ -38,7 +36,7 @@ const rateLimiter = createRateLimiter({
 
 export async function POST(request: Request): Promise<Response> {
   // Checked before anything else, so a flood costs as little as possible.
-  const decision = rateLimiter.check(clientKey(request.headers));
+  const decision = rateLimiter.check(callerKey(request.headers));
 
   if (!decision.allowed) {
     return Response.json(

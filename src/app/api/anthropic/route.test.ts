@@ -45,7 +45,7 @@ describe("the proxy route", () => {
     expect(await response.text()).not.toContain("sk-ant-test-key");
   });
 
-  it("refuses a client past the limit without spending anything upstream", async () => {
+  it("refuses a caller past the limit without spending anything upstream", async () => {
     for (let i = 0; i < PROXY_REQUESTS_PER_WINDOW; i++) {
       expect((await POST(requestFrom("203.0.113.3"))).status).toBe(200);
     }

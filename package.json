@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/check-client-bundle.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
