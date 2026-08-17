@@ -20,6 +20,7 @@ export type RecordedIncomeSource = {
   type: IncomeType;
   amountDollars: number;
   period: IncomePeriod;
+  hoursPerWeek?: number;
 };
 
 export type RecordedMember = {
@@ -73,7 +74,9 @@ export const recordHouseholdFactsTool = {
               type: "array",
               description:
                 "Where this person's money comes from — not a single total. Sending this replaces " +
-                "everything previously recorded for this person, so include every source you know of.",
+                "everything previously recorded for this person, so include every source you know of. " +
+                "Send an empty array for someone who has no income at all, including a young child: " +
+                "leaving this out means nobody has asked yet, and Screening keeps waiting on it.",
               items: {
                 type: "object",
                 properties: {
@@ -97,6 +100,12 @@ export const recordHouseholdFactsTool = {
                     type: "string",
                     enum: ["hourly", "weekly", "biweekly", "monthly", "annual"],
                     description: "The period the amount is for. Do not convert between periods.",
+                  },
+                  hoursPerWeek: {
+                    type: "number",
+                    description:
+                      "Hours worked in a typical week. Required when period is 'hourly' and " +
+                      "ignored otherwise. Do not multiply it out yourself.",
                   },
                 },
                 required: ["type", "amountDollars", "period"],
@@ -161,7 +170,10 @@ function mergeMembers(known: Member[], reported: RecordedMember[]): Member[] {
     if (existing) {
       Object.assign(existing, update);
     } else {
-      merged.push({ id, incomeSources: [], ...update });
+      // No empty income list for a member nobody has asked about yet. `[]`
+      // means "asked, and they have none" and would unblock Screening on a
+      // fact the conversation never went and got.
+      merged.push({ id, ...update });
     }
   }
 
@@ -169,7 +181,14 @@ function mergeMembers(known: Member[], reported: RecordedMember[]): Member[] {
 }
 
 function toIncomeSource(source: RecordedIncomeSource) {
-  return { type: source.type, amount: toCents(source.amountDollars)!, period: source.period };
+  return {
+    type: source.type,
+    amount: toCents(source.amountDollars)!,
+    period: source.period,
+    ...(source.period === "hourly" && source.hoursPerWeek !== undefined
+      ? { hoursPerWeek: source.hoursPerWeek }
+      : {}),
+  };
 }
 
 function toCents(dollars: number | undefined): Money | undefined {

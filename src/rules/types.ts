@@ -12,8 +12,13 @@ export type IsoDate = string;
 /** Stable identifier a Resident's household member is known by within one conversation. */
 export type MemberId = string;
 
-/** Identifier for a fact the rules module can be missing. */
-export type FactId = string;
+/**
+ * Identifier for a fact the rules module can be missing. Closed rather than
+ * `string` so the canonical ask-order in `facts.ts` is exhaustive by
+ * construction: a Program cannot declare itself blocked on a fact Elicitation
+ * has no place for.
+ */
+export type FactId = "household-members" | "food-sharing" | "income-sources" | "work-hours";
 
 /** Identifier for a Program or Keychain entry, e.g. `snap`, `ct-eitc`, `lifeline`. */
 export type ProgramId = string;
@@ -40,6 +45,14 @@ export type IncomeSource = {
   type: IncomeType;
   amount: Money;
   period: IncomePeriod;
+  /**
+   * Only meaningful when `period` is `hourly`, where it is required: an hourly
+   * rate is not an amount of money until it is multiplied by hours, and that
+   * multiplication is arithmetic, so it happens here rather than in the
+   * conversation (ADR-0010). Absent on an hourly source is a Blocking fact,
+   * not a reason to guess at full time.
+   */
+  hoursPerWeek?: number;
 };
 
 /**
@@ -53,7 +66,14 @@ export type Member = {
   relationship?: string;
   /** Feeds SNAP's Program unit. Each Program derives its own unit (ADR-0003). */
   sharesFoodPurchaseAndPreparation?: boolean;
-  incomeSources: IncomeSource[];
+  /**
+   * Absent and empty mean different things, and the difference is the whole
+   * point of the field: `undefined` is "nobody has asked yet" and keeps
+   * `income-sources` on the Blocking facts list; `[]` is "asked, and this
+   * person has none" and unblocks Screening. Collapsing the two would make a
+   * four-year-old and an unasked adult indistinguishable.
+   */
+  incomeSources?: IncomeSource[];
 };
 
 /**

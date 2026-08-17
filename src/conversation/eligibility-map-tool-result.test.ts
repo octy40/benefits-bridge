@@ -106,16 +106,16 @@ describe("buildEligibilityMapToolResult", () => {
     const map: ScreeningResult = {
       ...emptyMap(1),
       blockingFacts: [
-        { factId: "member-ages", blocks: ["snap", "husky-a", "care-4-kids"] },
-        { factId: "monthly-rent", blocks: ["renters-rebate"] },
+        { factId: "income-sources", blocks: ["snap", "husky-a", "care-4-kids"] },
+        { factId: "work-hours", blocks: ["snap"] },
       ],
     };
 
     const result = buildEligibilityMapToolResult(map, emptyMap(0));
 
     expect(result.blockingFacts).toEqual([
-      { factId: "member-ages", blocksPrograms: ["snap", "husky-a", "care-4-kids"], blocksCount: 3 },
-      { factId: "monthly-rent", blocksPrograms: ["renters-rebate"], blocksCount: 1 },
+      { factId: "income-sources", blocksPrograms: ["snap", "husky-a", "care-4-kids"], blocksCount: 3 },
+      { factId: "work-hours", blocksPrograms: ["snap"], blocksCount: 1 },
     ]);
   });
 });
