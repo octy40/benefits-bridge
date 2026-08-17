@@ -20,6 +20,19 @@ const PROGRAM_NAMES: Record<string, string> = {
   snap: "SNAP food assistance",
 };
 
+/**
+ * How a fact that is holding up a *figure* is described back to the Resident.
+ *
+ * Only the facts that block a figure need an entry: a fact that blocks an
+ * outcome keeps its Program off the map entirely, so there is no line to label.
+ * Naming the specific fact is what makes an entry moving from tier 2 to tier 1
+ * read as an answer arriving rather than as an estimate wobbling.
+ */
+const FIGURE_BLOCKER_NAMES: Record<string, string> = {
+  rent: "what you pay in rent",
+  "utility-costs": "which utilities you pay for",
+};
+
 export function EligibilityMapPanel({ screening }: { screening: ScreeningResult }) {
   // A Program the household is likely ineligible for is left off rather than
   // listed with a zero, so the map stays a list of things to do.
@@ -72,6 +85,7 @@ function EntryGroup({ entries, heading }: { entries: ProgramResult[]; heading?: 
             <li key={entry.programId} className="map-entry">
               <span className="map-entry-name">{nameOf(entry)}</span>
               <span className="map-entry-figure">{formatMoney(entry.figures!.annual)} a year</span>
+              <span className="map-entry-basis">{monthlyAndBasis(entry)}</span>
             </li>
           ))}
         </ol>
@@ -95,14 +109,43 @@ function nameOf(entry: ProgramResult): string {
   return PROGRAM_NAMES[entry.programId] ?? entry.programId;
 }
 
+/**
+ * The line under a tier-1 figure: the monthly form, and the period the agency
+ * published the figure for.
+ *
+ * Both come from `screen`. A monthly amount this panel divided out of an annual
+ * one would be a number nobody can defend, so an entry that carries no monthly
+ * figure simply does not show one (ADR-0010). The period is here because "$573
+ * a month" invites "as of when?", and the answer should be on screen rather
+ * than in someone's memory of which fiscal year this is.
+ */
+function monthlyAndBasis(entry: ProgramResult): string {
+  const monthly = entry.figures?.monthly;
+
+  return [monthly === undefined ? undefined : `${formatMoney(monthly)} a month`, entry.figures?.basis]
+    .filter((part) => part !== undefined)
+    .join(" · ");
+}
+
 function reasonForNoFigure(entry: ProgramResult): string {
   if (entry.noFigureReason === "coverage-not-cash") return "Coverage, not cash — no dollar figure to give.";
   if (entry.noFigureReason === "waitlisted" && entry.waitlist) {
     return `There is a queue — about ${entry.waitlist.typicalWaitMonths} months. Your place is set by your application date, so apply now.`;
   }
   if (entry.outcome === "indeterminate") return "Cannot be scored without a fact you are not required to give.";
+
   // "Likely qualify", never "qualify": BenefitBridge screens, and only the
   // agency running a Program can decide that anyone qualifies (CONTEXT.md,
   // *Screening*).
+  const waitingOn = entry.blockedBy.map((factId) => FIGURE_BLOCKER_NAMES[factId] ?? factId);
+  if (waitingOn.length > 0) {
+    return `You likely qualify — tell us ${joinWithAnd(waitingOn)} and this gets a figure.`;
+  }
+
   return "You likely qualify — we are still working out what it is worth.";
+}
+
+function joinWithAnd(phrases: string[]): string {
+  if (phrases.length <= 1) return phrases.join("");
+  return `${phrases.slice(0, -1).join(", ")} and ${phrases[phrases.length - 1]}`;
 }

@@ -52,4 +52,63 @@ export const ctBbceBoundaryHousehold: HouseholdProfile = {
   ],
   town: "Stamford",
   monthlyRent: 195_000,
+  // No `utilitiesPaid`: this fixture is the *outcome* regression and is
+  // deliberately left one fact short of a figure, so the suite keeps an example
+  // of an entry that is scored but still in tier 2. Maria below is the one that
+  // carries a dollar amount.
+};
+
+/**
+ * "Maria before her mother" — the household the demo opens on, and the first
+ * one BenefitBridge puts a dollar figure on.
+ *
+ * A single parent in Stamford with two children, nine and four, renting at
+ * $1,600 a month and paying her own heat. She earns about $24,900 a year:
+ * $18.00 an hour for 24 hours a week, plus $200 a month in cash. The cash is
+ * the point — it is countable earned income for SNAP and self-employment
+ * income for EITC, and a screener that asked "what is your annual income?"
+ * would have lost it (ADR-0009).
+ *
+ * She pays a heating bill, which in a mandatory-SUA state means the $976
+ * Standard Utility Allowance rather than her actual bills — and $1,600 of rent
+ * plus $976 of allowance puts her far enough above half her adjusted income
+ * that the excess shelter deduction is pinned at its $744 cap.
+ *
+ * The name is a promise about a second fixture. When her mother moves in, the
+ * unit grows to four, a Social Security stream arrives, and — because the
+ * household then contains an elderly member — the $744 cap comes off entirely.
+ * That is the household change the demo turns on, and it is issue #17's scope
+ * (gated on #10), not this fixture's: nothing here records disability or acts
+ * on age.
+ */
+export const mariaBeforeHerMother: HouseholdProfile = {
+  members: [
+    {
+      id: "self",
+      age: 31,
+      relationship: "self",
+      sharesFoodPurchaseAndPreparation: true,
+      incomeSources: [
+        { type: "wages", amount: 1_800, period: "hourly", hoursPerWeek: 24 },
+        { type: "cash-self-employment", amount: 20_000, period: "monthly" },
+      ],
+    },
+    {
+      id: "child-1",
+      age: 9,
+      relationship: "child",
+      sharesFoodPurchaseAndPreparation: true,
+      incomeSources: [],
+    },
+    {
+      id: "child-2",
+      age: 4,
+      relationship: "child",
+      sharesFoodPurchaseAndPreparation: true,
+      incomeSources: [],
+    },
+  ],
+  town: "Stamford",
+  monthlyRent: 160_000,
+  utilitiesPaid: ["heat", "electricity"],
 };

@@ -9,6 +9,21 @@ describe("record_household_facts tool definition", () => {
     expect(schema).not.toContain("Cents");
   });
 
+  it("gives the model somewhere to put the rent and utilities SNAP prices its allotment from", () => {
+    const schema = JSON.stringify(recordHouseholdFactsTool.input_schema);
+
+    expect(schema).toContain("monthlyRentDollars");
+    // A closed list rather than free text: SNAP's utility allowance turns on
+    // *which* utilities, and "heating" versus "heat" would otherwise decide a
+    // $976 allowance by string match.
+    expect(schema).toContain("utilitiesPaid");
+    expect(schema).toContain("heat");
+    expect(schema).toContain("air-conditioning");
+    // The empty-array convention has to reach the model, or a household whose
+    // rent covers everything waits forever for a figure.
+    expect(schema).toContain("empty array");
+  });
+
   it("offers no household size and no income field for the model to fill in", () => {
     const schema = JSON.stringify(recordHouseholdFactsTool.input_schema);
     expect(schema).not.toContain("householdSize");
@@ -117,6 +132,13 @@ describe("mergeFacts", () => {
     expect(merged.town).toBe("Stamford");
     expect(merged.utilitiesPaid).toEqual(["heat", "electricity"]);
     expect(merged.programsAlreadyReceived).toEqual(["snap"]);
+  });
+
+  it("records that a household pays for no utilities, distinctly from not asking", () => {
+    // Same distinction as `incomeSources`: `[]` unblocks the SNAP allotment
+    // with an allowance of nothing, absent keeps the question on the agenda.
+    expect(mergeFacts(emptyHouseholdProfile(), { utilitiesPaid: [] }).utilitiesPaid).toEqual([]);
+    expect(mergeFacts(emptyHouseholdProfile(), {}).utilitiesPaid).toBeUndefined();
   });
 
   it("does not mutate the profile it was given", () => {
