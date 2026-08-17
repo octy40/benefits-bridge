@@ -1,5 +1,6 @@
 import type {
   HouseholdProfile,
+  ImmigrationStatusAnswer,
   IncomePeriod,
   IncomeType,
   Member,
@@ -38,7 +39,7 @@ export type RecordedFacts = {
   monthlyRentDollars?: number;
   utilitiesPaid?: UtilityPaid[];
   programsAlreadyReceived?: string[];
-  immigrationStatusShared?: boolean;
+  immigrationStatus?: ImmigrationStatusAnswer;
 };
 
 export const recordHouseholdFactsTool = {
@@ -150,11 +151,18 @@ export const recordHouseholdFactsTool = {
         items: { type: "string" },
         description: "Benefits the household already receives, e.g. 'snap', 'husky'.",
       },
-      immigrationStatusShared: {
-        type: "boolean",
+      immigrationStatus: {
+        type: "string",
+        enum: ["declined", "all-qualifying", "mixed"],
         description:
-          "Only set this if the Resident volunteered their status after being told they may decline. " +
-          "Never required — a Resident who declines still gets an eligibility map.",
+          "The household's answer to the optional immigration status question, and only ever set " +
+          "after you have actually put that question with its reason stated. Never required — a " +
+          "Resident who declines still gets an eligibility map. Use 'all-qualifying' when everyone " +
+          "in the household has a status the Programs recognise, 'mixed' when at least one person " +
+          "does not, and 'declined' whenever you ask and do not get an answer — including when the " +
+          "Resident changes the subject, says they would rather not, or says nothing about it. " +
+          "Recording 'declined' is what closes the question; leaving this out after asking makes " +
+          "it look as though nobody has asked.",
       },
     },
   },
@@ -169,7 +177,12 @@ export function mergeFacts(profile: HouseholdProfile, facts: RecordedFacts): Hou
       monthlyRent: toCents(facts.monthlyRentDollars),
       utilitiesPaid: facts.utilitiesPaid,
       programsAlreadyReceived: facts.programsAlreadyReceived,
-      immigrationStatusShared: facts.immigrationStatusShared,
+      // Recorded like any other fact, and read by the rules module like any
+      // other fact. Nothing here forces the model to record `"declined"` when
+      // it asks and gets no answer — that gap is real and named rather than
+      // papered over (the tool schema asks for it; `statusQuestionOffered` in
+      // `agent-loop.ts` is what stops the question being put twice regardless).
+      immigrationStatus: facts.immigrationStatus,
     }),
   };
 }

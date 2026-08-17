@@ -1,5 +1,6 @@
 import { inForceOn, type EffectiveDated } from "../effective-dated";
 import { monthlyTotal, needsWorkHours } from "../income";
+import { statusDependent } from "../immigration-status";
 import type { ProgramRule } from "../program-rule";
 import type {
   FactId,
@@ -206,6 +207,33 @@ const IS_EARNED_INCOME: Record<IncomeType, boolean> = {
 };
 
 /**
+ * SNAP is status-dependent, so its whole score passes through
+ * `statusDependent` — one wrap at the seam rather than a branch on every
+ * return path inside `scoreSnap`, because a path that forgot it would look
+ * like a correct score.
+ *
+ * The eligible set is narrow and was narrowed again in November 2025 by H.R.1 /
+ * OBBBA: legal permanent residents (subject to a five-year wait with a long
+ * list of exceptions), Cuban/Haitian entrants, and citizens of the Compacts of
+ * Free Association. Refugees, asylees, trafficking victims and humanitarian
+ * parolees, who qualified before, no longer do.
+ *  - CT DSS, *What will change with DSS benefits following the passing of
+ *    federal H.R.1?* https://portal.ct.gov/dss/knowledge-base/articles/general-information/federal-updates-hr1
+ *  - USDA FNS https://www.fns.usda.gov/snap/obbb-alien-eligibility
+ *  - `docs/ct-program-facts.md` §8 carries the same table for every Program.
+ *
+ * None of that is implemented, and deliberately so: BenefitBridge asks one
+ * optional household-level question and cannot evaluate any of these categories
+ * per member (ADR-0004). What matters here is that a household whose answer is
+ * `"mixed"` is **not** screened out — under 7 CFR 273.11(c)(3) an ineligible
+ * member is dropped from the Program unit and their income is still counted, so
+ * the citizen children of a mixed-status household remain eligible for a
+ * smaller allotment this module cannot compute. Unscorable, not ineligible.
+ */
+export const screenSnap: ProgramRule = (profile, asOf) =>
+  statusDependent(scoreSnap(profile, asOf), profile.immigrationStatus);
+
+/**
  * SNAP's screen: derive the Program unit, total its gross monthly income,
  * compare it against Connecticut's limit for a unit that size, and — once the
  * household's shelter costs are known — compute the monthly allotment.
@@ -218,8 +246,12 @@ const IS_EARNED_INCOME: Record<IncomeType, boolean> = {
  * scored likely-eligible with no `figures` and the missing fact named in
  * `blockedBy`. It moves to tier 1 when the fact lands, so the panel reads as a
  * figure being refined rather than as one that will not sit still.
+ *
+ * Immigration status is absent from both halves on purpose. Every Blocking fact
+ * here is one Elicitation will go and get; status is asked at most once and
+ * never chased, so it is applied outside this function entirely.
  */
-export const screenSnap: ProgramRule = (profile, asOf) => {
+const scoreSnap: ProgramRule = (profile, asOf) => {
   const limits = inForceOn(CT_GROSS_INCOME_LIMITS, asOf);
   const allotmentFigures = inForceOn(SNAP_ALLOTMENT_FIGURES, asOf);
   const utilityAllowances = inForceOn(CT_UTILITY_ALLOWANCES, asOf);

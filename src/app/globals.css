@@ -181,6 +181,33 @@ body {
   border-top: 1px solid var(--line);
 }
 
+/*
+  Indeterminate. Deliberately not a third shade of the same list: a dashed rule
+  and an indented, unemphasised block so an entry BenefitBridge cannot place
+  never reads as one of the things it can (CONTEXT.md, *Indeterminate*).
+*/
+.map-tier-heading {
+  margin: 1rem 0 0;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--line);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.map-tier-indeterminate {
+  margin-top: 0.15rem;
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--line);
+}
+
+.map-tier-indeterminate .map-entry-name {
+  font-weight: 500;
+  color: var(--muted);
+}
+
 .map-entry {
   display: flex;
   flex-direction: column;

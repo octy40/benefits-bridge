@@ -20,6 +20,16 @@ import type { BlockingFact, FactId, ProgramId } from "./types";
  *
  * Written as a total map rather than a list so that adding a `FactId` without
  * deciding where it belongs in the conversation is a compile error.
+ *
+ * Immigration status is deliberately not here, and not a `FactId` at all —
+ * which is the first thing a reader will look for, since ADR-0004 makes it the
+ * most conspicuous thing BenefitBridge asks about. A Blocking fact is one
+ * Elicitation goes and gets until it has it, and this ranking is what tells the
+ * conversation to keep going and get it. A declined status never arrives, so it
+ * would sit at the top of this list and be re-asked every turn — precisely the
+ * behaviour ADR-0004 exists to prevent (CONTEXT.md, *Blocking fact*). It
+ * travels on its own channel instead: `ProgramScreening.awaitingStatus` and
+ * `ScreeningResult.statusQuestion`.
  */
 const ASK_ORDER: Record<FactId, number> = {
   "household-members": 0,

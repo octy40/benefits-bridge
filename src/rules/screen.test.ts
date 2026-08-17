@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ctBbceBoundaryHousehold, mariaBeforeHerMother } from "./fixtures";
+import { ctBbceBoundaryHousehold, declinedStatusHousehold, mariaBeforeHerMother } from "./fixtures";
 import { screen } from "./screen";
 import { emptyHouseholdProfile, type HouseholdProfile, type Member } from "./types";
 
@@ -308,6 +308,9 @@ describe("the SNAP monthly allotment", () => {
       // zero. Every derived form is here so the model never divides (ADR-0010).
       headlineAnnualTotal: 687_600,
       blockingFacts: [],
+      // Nothing is left to ask, so the one optional question opens — and only
+      // now, so it never competes with the ranked list (ADR-0002, ADR-0004).
+      statusQuestion: { blocks: ["snap"] },
     });
   });
 
@@ -451,6 +454,163 @@ describe("the SNAP monthly allotment", () => {
     // one too. An implementation that skipped the rounding would put $573.62
     // on the map.
     expect(monthly % 100).toBe(0);
+  });
+});
+
+describe("Indeterminate: the optional immigration status question", () => {
+  /**
+   * The figure pair, and the sharpest evidence available that the wiring works:
+   * one household, one field, $6,876 a year of difference. It is also the
+   * honest measure of what declining costs, which ADR-0004 (as amended)
+   * records rather than softens.
+   */
+  it("scores a household nobody has asked, and cannot score the same household once it declines", () => {
+    expect(screen(mariaBeforeHerMother, ASOF, 1).programs[0]!.figures!.annual).toBe(687_600);
+    expect(screen(mariaBeforeHerMother, ASOF, 1).headlineAnnualTotal).toBe(687_600);
+
+    expect(screen(declinedStatusHousehold, ASOF, 1).programs[0]!.figures).toBeUndefined();
+    expect(screen(declinedStatusHousehold, ASOF, 1).headlineAnnualTotal).toBe(0);
+  });
+
+  it("reports a status-dependent Program as indeterminate when the Resident declines", () => {
+    expect(screen(declinedStatusHousehold, ASOF, 1)).toEqual({
+      asOf: ASOF,
+      sequence: 1,
+      programs: [
+        {
+          programId: "snap",
+          outcome: "indeterminate",
+          // Reported as derived — who SNAP would count if everyone qualified.
+          // Real SNAP would count fewer (7 CFR 273.11(c)(3)), which is only
+          // defensible next to an outcome saying it cannot be scored.
+          unit: ["self", "child-1", "child-2"],
+          blockedBy: [],
+        },
+      ],
+      keychain: [],
+      // `headlineTotal` sums likely-eligible entries only, so an entry
+      // BenefitBridge cannot put either way cannot be counted as money owed.
+      //
+      // What this cannot assert, and must not fake: the ticket asks that
+      // status-blind Programs still be scored and the headline still be
+      // produced from them. SNAP is the only implemented Program and it is
+      // status-dependent, so $0 is the correct headline here. The CT
+      // Elderly/Disabled Renters' Rebate is the only genuinely status-blind
+      // Program on the list (`docs/ct-program-facts.md` §8); it is issue #17,
+      // gated on issue #10, and when it lands this assertion should carry a
+      // non-zero headline alongside an Indeterminate SNAP.
+      headlineAnnualTotal: 0,
+      // A declined household is asked for nothing further. Rent and utilities
+      // would only price an allotment BenefitBridge cannot say is owed.
+      blockingFacts: [],
+      // Answered — including answered with a refusal — closes the question for
+      // good. Re-asking is the ADR-0004 violation.
+    });
+  });
+
+  /**
+   * The regression that matters most. A mixed-status household is **not** an
+   * ineligible household: under 7 CFR 273.11(c)(3) the ineligible member is
+   * dropped from the Program unit and their income is still counted, so the
+   * citizen children remain eligible for a smaller allotment this coarse
+   * implementation cannot compute. Unscorable, not ineligible — and an
+   * implementation that "helpfully" screened them out would be telling a
+   * Stamford family the opposite of the law.
+   */
+  it("reports a mixed-status household as indeterminate, never as likely-ineligible", () => {
+    const mixed = { ...mariaBeforeHerMother, immigrationStatus: "mixed" as const };
+
+    expect(screen(mixed, ASOF, 1)).toEqual({
+      asOf: ASOF,
+      sequence: 1,
+      programs: [
+        { programId: "snap", outcome: "indeterminate", unit: ["self", "child-1", "child-2"], blockedBy: [] },
+      ],
+      keychain: [],
+      headlineAnnualTotal: 0,
+      blockingFacts: [],
+    });
+  });
+
+  it("scores a household that says everyone qualifies exactly as it scores an unasked one", () => {
+    const answered = { ...mariaBeforeHerMother, immigrationStatus: "all-qualifying" as const };
+
+    expect(screen(answered, ASOF, 1)).toEqual({
+      asOf: ASOF,
+      sequence: 1,
+      programs: [
+        {
+          programId: "snap",
+          outcome: "likely-eligible",
+          unit: ["self", "child-1", "child-2"],
+          figures: {
+            monthly: 57_300,
+            annual: 687_600,
+            basis: "FY2026 figures (October 2025 – September 2026)",
+          },
+          blockedBy: [],
+        },
+      ],
+      keychain: [],
+      headlineAnnualTotal: 687_600,
+      blockingFacts: [],
+      // The question is spent, so it is not offered again.
+    });
+  });
+
+  it("offers the question only once nothing is left on the Blocking facts list", () => {
+    // Mid-conversation: SNAP is scored but the utilities that price it are not
+    // known. The ranked list is the agenda and the optional question waits, so
+    // the two never compete (ADR-0002).
+    const { utilitiesPaid, ...midConversation } = mariaBeforeHerMother;
+
+    expect(screen(midConversation, ASOF, 0).blockingFacts).toEqual([
+      { factId: "utility-costs", blocks: ["snap"] },
+    ]);
+    expect(screen(midConversation, ASOF, 0).statusQuestion).toBeUndefined();
+
+    expect(screen(mariaBeforeHerMother, ASOF, 0).statusQuestion).toEqual({ blocks: ["snap"] });
+  });
+
+  it("closes the question once any answer is recorded, a decline included", () => {
+    for (const immigrationStatus of ["declined", "all-qualifying", "mixed"] as const) {
+      expect(screen({ ...mariaBeforeHerMother, immigrationStatus }, ASOF, 0).statusQuestion).toBeUndefined();
+    }
+  });
+
+  it("does not put the question to a household no answer could help", () => {
+    // Over CT's limit, so SNAP is likely-ineligible whatever the answer: status
+    // can only shrink a Program unit while the dropped member's income is still
+    // counted (7 CFR 273.11(c)(3)), which is strictly harsher than the test
+    // just applied. Asking anyway would be a question that buys the Resident
+    // nothing — the same reason a likely-ineligible household is never asked
+    // what it pays in rent.
+    const overLimit = {
+      ...householdOfThree(CT_LIMIT_HH3 + 100_000),
+      monthlyRent: 160_000,
+      utilitiesPaid: ["heat" as const],
+    };
+
+    expect(screen(overLimit, ASOF, 0).programs[0]!.outcome).toBe("likely-ineligible");
+    expect(screen(overLimit, ASOF, 0).statusQuestion).toBeUndefined();
+  });
+
+  it("leaves Elicitation's agenda untouched, because status is not a Blocking fact", () => {
+    // `facts.ts` does not change and must not: a declined status never arrives,
+    // so on the ranked list it would pin itself to the top and be re-asked
+    // every turn (CONTEXT.md, *Blocking fact*; ADR-0004).
+    const opening: HouseholdProfile = { members: [] };
+
+    expect(blockingFactIds(opening)).toEqual([
+      "household-members",
+      "food-sharing",
+      "income-sources",
+    ]);
+    expect(blockingFactIds({ ...opening, immigrationStatus: "declined" })).toEqual([
+      "household-members",
+      "food-sharing",
+      "income-sources",
+    ]);
   });
 });
 

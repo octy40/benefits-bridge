@@ -11,6 +11,8 @@ import type { ProgramResult, ScreeningResult } from "@/rules/types";
  *
  * Two tiers, per CONTEXT.md: entries carrying a defensible figure sum to the
  * headline; entries with no figure sit beneath it, each carrying its own reason.
+ * Indeterminate entries are neither, and are grouped apart from both — a
+ * Program BenefitBridge cannot place is not a smaller version of one it can.
  */
 /**
  * Resident-facing names. Program ids are the rules module's vocabulary and are
@@ -72,8 +74,16 @@ export function EligibilityMapPanel({ screening }: { screening: ScreeningResult 
 function EntryGroup({ entries, heading }: { entries: ProgramResult[]; heading?: string }) {
   if (entries.length === 0) return null;
 
-  const withFigures = entries.filter((entry) => entry.figures);
-  const withoutFigures = entries.filter((entry) => !entry.figures);
+  // Split on `outcome` before splitting on `figures`. An Indeterminate entry
+  // also has no figure, and grouped by figures alone it would sit in the
+  // tier-2 list looking exactly like a Program the household likely qualifies
+  // for and is merely waiting on a number for — under a headline that says
+  // "Likely available to you each year", which reads as a win. They are
+  // opposite things and get opposite treatment (CONTEXT.md, *Indeterminate*).
+  const indeterminate = entries.filter((entry) => entry.outcome === "indeterminate");
+  const scored = entries.filter((entry) => entry.outcome !== "indeterminate");
+  const withFigures = scored.filter((entry) => entry.figures);
+  const withoutFigures = scored.filter((entry) => !entry.figures);
 
   return (
     <section className="map-group">
@@ -100,6 +110,26 @@ function EntryGroup({ entries, heading }: { entries: ProgramResult[]; heading?: 
             </li>
           ))}
         </ol>
+      ) : null}
+
+      {/*
+        Its own group, heading and modifier class, so an entry BenefitBridge
+        cannot place is visibly not one of the things above it. The heading
+        carries the choice back to the Resident rather than leaving it in a
+        sentence they may not read (ADR-0004).
+      */}
+      {indeterminate.length > 0 ? (
+        <>
+          <h3 className="map-tier-heading">We can’t put these either way — and that’s your call</h3>
+          <ol className="map-tier map-tier-indeterminate">
+            {indeterminate.map((entry) => (
+              <li key={entry.programId} className="map-entry">
+                <span className="map-entry-name">{nameOf(entry)}</span>
+                <span className="map-entry-reason">{reasonForNoFigure(entry)}</span>
+              </li>
+            ))}
+          </ol>
+        </>
       ) : null}
     </section>
   );
@@ -128,11 +158,23 @@ function monthlyAndBasis(entry: ProgramResult): string {
 }
 
 function reasonForNoFigure(entry: ProgramResult): string {
+  // The outcome is tested first, and the order is load-bearing rather than
+  // stylistic. HUSKY will arrive carrying `noFigureReason: "coverage-not-cash"`,
+  // and an Indeterminate HUSKY tested the other way round would render
+  // "Coverage, not cash" — the indeterminacy would simply disappear. A reason a
+  // figure is missing only makes sense once there is an outcome to price.
+  //
+  // Named plainly, and not as a category: it says which fact, and it says the
+  // Resident was right to keep it if they did (CONTEXT.md, *Elicitation*;
+  // ADR-0004).
+  if (entry.outcome === "indeterminate") {
+    return "We can’t put this one either way without knowing about immigration status — and you don’t have to tell us.";
+  }
+
   if (entry.noFigureReason === "coverage-not-cash") return "Coverage, not cash — no dollar figure to give.";
   if (entry.noFigureReason === "waitlisted" && entry.waitlist) {
     return `There is a queue — about ${entry.waitlist.typicalWaitMonths} months. Your place is set by your application date, so apply now.`;
   }
-  if (entry.outcome === "indeterminate") return "Cannot be scored without a fact you are not required to give.";
 
   // "Likely qualify", never "qualify": BenefitBridge screens, and only the
   // agency running a Program can decide that anyone qualifies (CONTEXT.md,
