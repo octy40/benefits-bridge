@@ -6,6 +6,10 @@ node_modules/
 .next/
 next-env.d.ts
 *.tsbuildinfo
-.env
-.env.local
 .vercel
+
+# Every env file variant, except the committed template. `vercel link` writes a
+# bare `.env*` here, which also swallows .env.example — the one env file that is
+# meant to be in the repo.
+.env*
+!.env.example
