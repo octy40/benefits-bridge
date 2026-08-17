@@ -22,8 +22,29 @@ describe("mergeFacts", () => {
       members: [{ id: "self", age: 31, relationship: "self" }],
     });
 
-    expect(merged.members).toEqual([
-      { id: "self", age: 31, relationship: "self", incomeSources: [] },
+    // No income list at all, rather than an empty one: a member nobody has
+    // asked about must keep income on the Blocking facts list.
+    expect(merged.members).toEqual([{ id: "self", age: 31, relationship: "self" }]);
+  });
+
+  it("records that a member was asked and has no income, distinctly from not asking", () => {
+    const merged = mergeFacts(emptyHouseholdProfile(), {
+      members: [{ id: "child-1", age: 4, incomeSources: [] }, { id: "child-2", age: 9 }],
+    });
+
+    expect(merged.members[0]!.incomeSources).toEqual([]);
+    expect(merged.members[1]!.incomeSources).toBeUndefined();
+  });
+
+  it("keeps hours against an hourly rate, and does not multiply them out", () => {
+    const merged = mergeFacts(emptyHouseholdProfile(), {
+      members: [
+        { id: "self", incomeSources: [{ type: "wages", amountDollars: 20, period: "hourly", hoursPerWeek: 37 }] },
+      ],
+    });
+
+    expect(merged.members[0]!.incomeSources).toEqual([
+      { type: "wages", amount: 2_000, period: "hourly", hoursPerWeek: 37 },
     ]);
   });
 
