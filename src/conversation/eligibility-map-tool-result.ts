@@ -19,6 +19,8 @@ export type EligibilityMapToolResult = {
   supersedes: string;
   asOf: string;
   headlineAnnualTotal: string;
+  /** Set only when the total above includes a `provisional` figure — say "proposed" when quoting it. */
+  headlineAnnualTotalProvisional?: boolean;
   changeSincePreviousMap: {
     headlineAnnualTotal: string;
     programsAdded: string[];
@@ -50,6 +52,13 @@ export type EligibilityMapEntry = {
   monthly?: string;
   /** The period the agency published these figures for, e.g. FY2026. */
   figuresBasis?: string;
+  /**
+   * Set only when the issuing agency itself has not finalised this figure —
+   * CEAP's FFY2027 season as of this research. The model must say "proposed"
+   * whenever it quotes a figure carrying this, rather than treating it as
+   * settled (ADR-0010: a fact the model acts on, not prose it has to parse).
+   */
+  provisional?: boolean;
   noFigureReason?: string;
   waitlist?: { typicalWaitMonths: number; invitingApplicationsReceivedBy: string };
   blockedBy: string[];
@@ -75,6 +84,7 @@ export function buildEligibilityMapToolResult(
       `is out of date and must not be quoted to the Resident.`,
     asOf: current.asOf,
     headlineAnnualTotal: formatMoney(current.headlineAnnualTotal),
+    ...(current.headlineAnnualTotalProvisional ? { headlineAnnualTotalProvisional: true as const } : {}),
     changeSincePreviousMap: describeChange(current, previous),
     programs: current.programs.map(toEntry),
     keychain: current.keychain.map(toEntry),
@@ -118,6 +128,7 @@ function toEntry(program: ProgramResult): EligibilityMapEntry {
     // Resident asking "is that this year's number?" gets an answer the model
     // transcribes instead of one it recalls.
     ...(program.figures?.basis ? { figuresBasis: program.figures.basis } : {}),
+    ...(program.figures?.provisional ? { provisional: true as const } : {}),
     ...(program.noFigureReason ? { noFigureReason: program.noFigureReason } : {}),
     ...(program.waitlist ? { waitlist: program.waitlist } : {}),
     blockedBy: program.blockedBy,

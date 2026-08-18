@@ -1,5 +1,6 @@
 import { rankBlockingFacts } from "./facts";
 import type { ProgramRule, ProgramScreening } from "./program-rule";
+import { screenCeap } from "./programs/ceap";
 import { screenSnap } from "./programs/snap";
 import type {
   BlockingFact,
@@ -18,7 +19,7 @@ import type {
  * because the conversation's agenda comes from what these report themselves
  * blocked on (ADR-0002).
  */
-const PROGRAM_RULES: ProgramRule[] = [screenSnap];
+const PROGRAM_RULES: ProgramRule[] = [screenSnap, screenCeap];
 
 /**
  * The single seam. All Screening lives behind this function.
@@ -51,13 +52,15 @@ export function screen(
   const keychain: ProgramResult[] = [];
 
   const blockingFacts = rankBlockingFacts(screenings);
+  const headlineEntries = [...programs, ...keychain];
 
   return {
     asOf,
     sequence,
     programs,
     keychain,
-    headlineAnnualTotal: headlineTotal([...programs, ...keychain]),
+    headlineAnnualTotal: headlineTotal(headlineEntries),
+    ...(headlineIncludesProvisionalFigure(headlineEntries) ? { headlineAnnualTotalProvisional: true } : {}),
     blockingFacts,
     ...statusQuestion(screenings, profile.immigrationStatus, blockingFacts),
   };
@@ -109,4 +112,14 @@ function headlineTotal(entries: ProgramResult[]): Money {
   return entries
     .filter((entry) => entry.outcome === "likely-eligible")
     .reduce((total, entry) => total + (entry.figures?.annual ?? 0), 0);
+}
+
+/**
+ * Whether any figure that actually contributed to `headlineTotal` is
+ * provisional — the same `likely-eligible` filter, so an ineligible or
+ * indeterminate entry's `provisional` flag (which cannot happen today, but
+ * nothing prevents it structurally) never taints a total it never joined.
+ */
+function headlineIncludesProvisionalFigure(entries: ProgramResult[]): boolean {
+  return entries.some((entry) => entry.outcome === "likely-eligible" && entry.figures?.provisional === true);
 }

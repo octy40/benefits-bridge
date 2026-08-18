@@ -24,7 +24,8 @@ export type FactId =
   | "income-sources"
   | "work-hours"
   | "rent"
-  | "utility-costs";
+  | "utility-costs"
+  | "disability";
 
 /** Identifier for a Program or Keychain entry, e.g. `snap`, `ct-eitc`, `lifeline`. */
 export type ProgramId = string;
@@ -106,6 +107,15 @@ export type Member = {
    * four-year-old and an unasked adult indistinguishable.
    */
   incomeSources?: IncomeSource[];
+  /**
+   * Same `undefined`-versus-answered distinction as `sharesFoodPurchaseAndPreparation`:
+   * absent is "nobody has asked", `false` is "asked, and no". Feeds CEAP's
+   * vulnerable-household distinction (`programs/ceap.ts`) alongside age — a
+   * member 60+ or a child under 6 already settles it without this ever being
+   * asked, so a household is only blocked on `disability` when age alone
+   * cannot decide.
+   */
+  hasDisability?: boolean;
 };
 
 /**
@@ -178,8 +188,22 @@ export type ProgramResult = {
    * conversation might need is here, because the model may not divide or sum
    * (ADR-0010) — `basis` included, so a figure is never quoted without the
    * period the agency published it for.
+   *
+   * `provisional` is a typed flag rather than folded into `basis`, and that was
+   * a deliberate call rather than a default. CEAP is the first Program whose
+   * own allocation plan carries figures its issuing agency labels *proposed,
+   * not final* (`docs/ct-program-facts.md` §4, the FFY2027 season) — SNAP's
+   * `basis` up to now has only ever named a period nobody disputes. A caption
+   * is prose: something downstream has to read it and decide whether it says
+   * "proposed" before deciding whether to show a caveat, which is exactly the
+   * string-parsing ADR-0010 exists to keep out of the model's hands. A boolean
+   * is a fact the conversation layer can act on directly — badge it, caveat
+   * it, whatever a given surface needs — without re-deriving meaning from text
+   * a future caption might phrase differently. `basis` still carries the
+   * human-readable "which season" story; `provisional` carries the one bit
+   * that changes what a surface does with it.
    */
-  figures?: { monthly?: Money; annual: Money; basis?: string };
+  figures?: { monthly?: Money; annual: Money; basis?: string; provisional?: boolean };
   noFigureReason?: NoFigureReason;
   waitlist?: { typicalWaitMonths: number; invitingApplicationsReceivedBy: IsoDate };
   /**
@@ -213,6 +237,15 @@ export type ScreeningResult = {
   keychain: ProgramResult[];
   /** Sum of tier-1 annual figures only. */
   headlineAnnualTotal: Money;
+  /**
+   * Set only when at least one figure summed into `headlineAnnualTotal`
+   * carries `provisional` — CEAP's FFY2027 season, currently. A single sum
+   * cannot carry a per-figure caveat the way an entry's own line can, so this
+   * is the fact a surface acts on to caveat the *total* instead of silently
+   * blending a proposed figure into a number that reads as settled
+   * (ADR-0010; issue #19, "labelled as such wherever shown").
+   */
+  headlineAnnualTotalProvisional?: boolean;
   /** Ranked, most Programs blocked first. Drives Elicitation (ADR-0002). */
   blockingFacts: BlockingFact[];
   /**

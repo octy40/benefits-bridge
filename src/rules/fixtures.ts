@@ -146,3 +146,31 @@ export const declinedStatusHousehold: HouseholdProfile = {
   ...mariaBeforeHerMother,
   immigrationStatus: "declined",
 };
+
+/**
+ * The case that proves the product's thesis in the government's own words: a
+ * household already receiving SNAP is categorically income-eligible for CEAP
+ * without proving income again (`docs/ct-program-facts.md` §4; issue #19).
+ *
+ * A single parent and her five-year-old, in Stamford, already on SNAP —
+ * `programsAlreadyReceived` carries that — and nothing else about the
+ * household has been said yet. Neither member's `incomeSources` has been
+ * asked for, and CEAP still scores `likely-eligible` from that one recorded
+ * fact alone. SNAP itself gets no such shortcut: `screenSnap` never reads
+ * `programsAlreadyReceived`, so it stays off the map pending the food-sharing
+ * and income facts it always needs, which is the contrast this fixture is
+ * built to show side by side with the same conversation turn.
+ *
+ * The figure is still tier 2: CEAP's dollar amount needs the income CEAP's
+ * *eligibility* just did without, plus whether the household rents. The
+ * child's age already settles vulnerability (under 6), so `disability` is
+ * never on the agenda for this household at all.
+ */
+export const ceapCategoricalHousehold: HouseholdProfile = {
+  members: [
+    { id: "self", age: 29, relationship: "self", sharesFoodPurchaseAndPreparation: true },
+    { id: "child-1", age: 5, relationship: "child", sharesFoodPurchaseAndPreparation: true },
+  ],
+  town: "Stamford",
+  programsAlreadyReceived: ["snap"],
+};

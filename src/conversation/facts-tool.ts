@@ -30,6 +30,7 @@ export type RecordedMember = {
   age?: number;
   relationship?: string;
   sharesFoodPurchaseAndPreparation?: boolean;
+  hasDisability?: boolean;
   incomeSources?: RecordedIncomeSource[];
 };
 
@@ -71,6 +72,12 @@ export const recordHouseholdFactsTool = {
             sharesFoodPurchaseAndPreparation: {
               type: "boolean",
               description: "Whether this person buys and prepares food together with the Resident.",
+            },
+            hasDisability: {
+              type: "boolean",
+              description:
+                "Whether this person has a disability. Only ask this when it is still needed to price a " +
+                "figure — a household with a member 60+ or a child under 6 never needs this asked at all.",
             },
             incomeSources: {
               type: "array",
@@ -149,7 +156,11 @@ export const recordHouseholdFactsTool = {
       programsAlreadyReceived: {
         type: "array",
         items: { type: "string" },
-        description: "Benefits the household already receives, e.g. 'snap', 'husky'.",
+        description:
+          "Benefits the household already receives, e.g. 'snap', 'husky', 'tfa', 'ssi', " +
+          "'refugee-cash-assistance', 'state-supplement'. A household already receiving SNAP, TFA, " +
+          "Refugee Cash Assistance, State Supplement, or SSI does not need to prove its income again " +
+          "for CEAP energy assistance — recording this is what unlocks that.",
       },
       immigrationStatus: {
         type: "string",

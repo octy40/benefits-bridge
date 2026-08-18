@@ -42,6 +42,18 @@ describe("record_household_facts tool definition", () => {
     expect(schema).not.toContain("householdSize");
     expect(schema).not.toMatch(/"income"\s*:/);
   });
+
+  it("names the categorically-eligible Programs so the model knows to record them", () => {
+    const schema = JSON.stringify(recordHouseholdFactsTool.input_schema);
+
+    // CEAP's categorical-eligibility route is the case that proves the
+    // product's thesis; the model has to know these strings are worth
+    // capturing or the household never gets the benefit of it.
+    expect(schema).toContain("tfa");
+    expect(schema).toContain("refugee-cash-assistance");
+    expect(schema).toContain("state-supplement");
+    expect(schema).toContain("hasDisability");
+  });
 });
 
 describe("mergeFacts", () => {
@@ -74,6 +86,15 @@ describe("mergeFacts", () => {
     expect(merged.members[0]!.incomeSources).toEqual([
       { type: "wages", amount: 2_000, period: "hourly", hoursPerWeek: 37 },
     ]);
+  });
+
+  it("records a member's disability, distinctly from not asking", () => {
+    const merged = mergeFacts(emptyHouseholdProfile(), {
+      members: [{ id: "self", hasDisability: true }, { id: "child-1" }],
+    });
+
+    expect(merged.members[0]!.hasDisability).toBe(true);
+    expect(merged.members[1]!.hasDisability).toBeUndefined();
   });
 
   it("updates a known member without dropping facts it was not told about", () => {
