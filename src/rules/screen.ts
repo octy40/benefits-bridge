@@ -1,7 +1,15 @@
 import { rankBlockingFacts } from "./facts";
-import type { ProgramRule } from "./program-rule";
+import type { ProgramRule, ProgramScreening } from "./program-rule";
 import { screenSnap } from "./programs/snap";
-import type { HouseholdProfile, IsoDate, Money, ProgramResult, ScreeningResult } from "./types";
+import type {
+  BlockingFact,
+  HouseholdProfile,
+  ImmigrationStatusAnswer,
+  IsoDate,
+  Money,
+  ProgramResult,
+  ScreeningResult,
+} from "./types";
 
 /**
  * Every Program BenefitBridge screens, in eligibility map order.
@@ -42,20 +50,60 @@ export function screen(
   // outcomes as well as the Household profile. It arrives with its entries.
   const keychain: ProgramResult[] = [];
 
+  const blockingFacts = rankBlockingFacts(screenings);
+
   return {
     asOf,
     sequence,
     programs,
     keychain,
     headlineAnnualTotal: headlineTotal([...programs, ...keychain]),
-    blockingFacts: rankBlockingFacts(screenings),
+    blockingFacts,
+    ...statusQuestion(screenings, profile.immigrationStatus, blockingFacts),
   };
+}
+
+/**
+ * Whether the one optional question is open, and which Programs it would move.
+ *
+ * Three conditions, and each is doing separate work:
+ *
+ *  - nobody has asked. Every answer, `"declined"` included, closes the question
+ *    for good — asking twice is the ADR-0004 violation;
+ *  - at least one Program is otherwise scorable and turns on the answer, so the
+ *    reason for asking can be stated as a fact about *this* household rather
+ *    than as a category;
+ *  - nothing is left on the Blocking facts list. That keeps ADR-0002's
+ *    single-agenda property true at every point: first the ranked list, then —
+ *    once there is nothing left to ask — one optional question. It also means a
+ *    Resident who leaves early is never asked at all.
+ *
+ * This reports that the question is *open*, not that it has never been put. A
+ * pure function cannot know the latter; the conversation owns that, exactly as
+ * it owns the `sequence` counter above.
+ */
+function statusQuestion(
+  screenings: ProgramScreening[],
+  status: ImmigrationStatusAnswer | undefined,
+  blockingFacts: BlockingFact[],
+): Pick<ScreeningResult, "statusQuestion"> {
+  if (status !== undefined || blockingFacts.length > 0) return {};
+
+  const blocks = screenings
+    .filter((screening) => screening.awaitingStatus)
+    .map((screening) => screening.programId);
+
+  return blocks.length > 0 ? { statusQuestion: { blocks } } : {};
 }
 
 /**
  * Tier 1 only: entries BenefitBridge can put a defensible figure on. An entry
  * with no figure contributes nothing rather than a zero, and an entry the
  * household is likely ineligible for contributes nothing at all.
+ *
+ * An `indeterminate` entry contributes nothing either, and the existing filter
+ * is why — the headline is built from what BenefitBridge can defend, so an
+ * entry it cannot put either way has no place in it (ADR-0004, ADR-0010).
  */
 function headlineTotal(entries: ProgramResult[]): Money {
   return entries

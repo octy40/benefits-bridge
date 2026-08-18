@@ -24,6 +24,19 @@ describe("record_household_facts tool definition", () => {
     expect(schema).toContain("empty array");
   });
 
+  it("gives the model a way to record a decline, not just an answer", () => {
+    const schema = JSON.stringify(recordHouseholdFactsTool.input_schema);
+
+    // Three values, and `declined` is the load-bearing one: it is the only
+    // thing that closes the question without answering it (ADR-0004).
+    expect(schema).toContain("immigrationStatus");
+    expect(schema).toContain("declined");
+    expect(schema).toContain("all-qualifying");
+    expect(schema).toContain("mixed");
+    // The reason has to reach the model, or the question gets put as a demand.
+    expect(schema).toContain("Never required");
+  });
+
   it("offers no household size and no income field for the model to fill in", () => {
     const schema = JSON.stringify(recordHouseholdFactsTool.input_schema);
     expect(schema).not.toContain("householdSize");
@@ -139,6 +152,15 @@ describe("mergeFacts", () => {
     // with an allowance of nothing, absent keeps the question on the agenda.
     expect(mergeFacts(emptyHouseholdProfile(), { utilitiesPaid: [] }).utilitiesPaid).toEqual([]);
     expect(mergeFacts(emptyHouseholdProfile(), {}).utilitiesPaid).toBeUndefined();
+  });
+
+  it("records a declined status distinctly from nobody having asked", () => {
+    // The same distinction `incomeSources` and `utilitiesPaid` draw, and here
+    // it decides whether the question may be put again at all.
+    expect(mergeFacts(emptyHouseholdProfile(), { immigrationStatus: "declined" }).immigrationStatus).toBe(
+      "declined",
+    );
+    expect(mergeFacts(emptyHouseholdProfile(), {}).immigrationStatus).toBeUndefined();
   });
 
   it("does not mutate the profile it was given", () => {
