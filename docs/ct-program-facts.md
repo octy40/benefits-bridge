@@ -414,7 +414,69 @@ Confirmed by the FFY2027 LIHEAP plan: applying for CEAP causes the utilities to 
 
 ---
 
-## 8 · Review of `docs/market-research.md` — errors, staleness, and risks
+## 8 · Immigration status — which Programs turn on it
+
+**Research date: 2026-08-17.** This section exists so the rules files have something to cite the way `snap.ts` cites the BBCE figures. BenefitBridge deliberately never requires status (ADR-0004) and screens it coarsely — one optional household-level question — so nothing below is implemented as a per-member test. It is here to record what the coarse version is approximating, and how badly.
+
+### Which non-citizens are eligible for SNAP
+
+Since H.R.1 / OBBBA the eligible set is narrow, and was *narrowed* in November 2025:
+
+> "legal permanent residents, Cuban/Haitian entrants, and Compacts of Free Association (COFA) citizens"
+>
+> "Individuals such as refugees, asylees, trafficking victims, humanitarian parolees and more who currently qualify for SNAP will no longer be eligible due to their immigration status"
+
+— CT DSS, *What will change with DSS benefits following the passing of federal H.R.1?* https://portal.ct.gov/dss/knowledge-base/articles/general-information/federal-updates-hr1 (SNAP change effective November 2025; the identical Medicaid/HUSKY change lands **October 1, 2026**.)
+
+LPRs are additionally subject to a five-year waiting period, waived for LPRs under 18, LPRs with 40 qualifying work quarters, blind/disabled LPRs, those lawfully residing and 65+ on 8/22/1996, military-connected LPRs, Amerasian immigrants, American Indians born abroad, and certain Hmong/Highland Laotian tribal members. Sources: https://www.fns.usda.gov/snap/obbb-alien-eligibility · https://www.fns.usda.gov/snap/eligibility/citizen/non-citizen-policy (both fns.usda.gov hosts timed out repeatedly on 2026-08-17; the category list is corroborated by the CT DSS H.R.1 article above, a state agency implementing the same rule).
+
+CT DSS's own resident-facing SNAP page says only: "You do not have to be a U.S. citizen to get SNAP." and "Getting SNAP does not impact your or your kid's immigration status." — https://portal.ct.gov/dss/snap/supplemental-nutrition-assistance-program---snap/eligibility
+
+### The mixed-status household — the finding that matters most
+
+**SNAP does not deny the household. It shrinks it.** An ineligible non-citizen is removed from household size but their income is still counted against the (now smaller) household's limit. From 7 CFR § 273.11(c)(3), *Ineligible alien*:
+
+> "The State agency must count all or, at the discretion of the State agency, all but a pro rata share, of the ineligible alien's income and deductible expenses and all of the ineligible alien's resources."
+
+and, on household size, ineligible aliens "shall not be included when determining their households' sizes for the purposes of" assigning benefit levels, standard deductions, comparing income to eligibility standards, or comparing resources to limits.
+
+— 7 CFR § 273.11(c)(3), via Cornell LII https://www.law.cornell.edu/cfr/text/7/273.11 (ecfr.gov 302-redirected to an unblock interstitial on every attempt.)
+
+Two consequences:
+
+1. A Stamford parent without status and two citizen children is screened as a **household of two** against the household-of-two limit ($3,525/mo CT BBCE), with all or a pro-rata share of the parent's income counted. That is materially harsher than a household of three ($4,442/mo) — but it is *not* zero, and the children are eligible.
+2. Whether it is "all" or "all but a pro rata share" is a **state option**, and Connecticut's election could not be located in a primary CT source (the CT Uniform Policy Manual provision was not retrievable). **UNVERIFIED for CT.** Per-member evaluation cannot be implemented correctly without it.
+
+USDA FNS, *SNAP Guidance on Non-Citizen Eligibility* (June 2011, FNS-authored, retrieved from the NILC mirror https://media.nilc.org/wp-content/uploads/2019/05/Non-Citizen_Guidance_063011.pdf) confirms the same shape. Non-applicant members are **not required to state their status** — a parent without status may apply on behalf of eligible children without giving their own immigration information, and their income is still counted (End Hunger CT!, *SNAP Series: Immigrant & Mixed Status Families*, https://endhungerct.org/ehc-snap-series-immigrant-mixed-status-families/ — advocacy secondary, but it is the operational restatement of §273.11(c)(3) above).
+
+### Program by Program
+
+| Program | Status-dependent? | How, and source |
+| --- | --- | --- |
+| **SNAP** | **Yes**, per member | Eligible categories above; ineligible members dropped from household size, income still counted (7 CFR 273.11(c)(3)). A mixed-status household **is** eligible for its qualifying members. |
+| **CT EITC** | **Yes** — via SSN, not status directly | Schedule CT-EITC Line 1 gates the credit on having claimed the **federal** EITC ("Stop; you do not qualify for the CT EITC" otherwise) — https://portal.ct.gov/-/media/drs/forms/2025/income/schedule-ct-eitc_1225.pdf. Federal EITC requires an SSN "issued on or before the due date of the tax return", invalid if it "was issued solely to apply for or receive a federally funded benefit … and does not authorize you to work", and the filer must be a "U.S. citizen or resident alien all year" — https://www.irs.gov/credits-deductions/individuals/earned-income-tax-credit/who-qualifies-for-the-earned-income-tax-credit-eitc. ITIN filers cannot claim it, and **Connecticut is not among the states that opened their state EITC to ITIN filers** (CA, CO, DC, IL, ME, MD, MN, NM, OR, VT, WA). |
+| **HUSKY A / C / D** (federal Medicaid) | **Yes** | Qualified-immigrant rules; H.R.1 narrows to LPR / Cuban-Haitian entrant / COFA **effective 2026-10-01** (CT DSS H.R.1 article). CT's HUSKY "How to Qualify" page states an explicit status test only for the TB and Family Planning limited benefits, and notes Emergency Medicaid covers those "who meet all requirements for Medicaid except immigration status" — https://portal.ct.gov/husky/how-to-qualify |
+| **HUSKY B** (CHIP) | **Yes** federally — but see next row | Same qualified-immigrant framework. |
+| **State HUSKY A / HUSKY B for Children** | **Effectively status-blind, by design** | Covers uninsured children ages 0-15 with household income 0-323% FPL who "do not qualify for regular HUSKY A Medicaid or HUSKY B CHIP coverage **because they do not have a qualifying immigration status**" — https://portal.ct.gov/dss/health-and-home-care/state-husky-a-and-husky-b-for-children-health-coverage. Age ceiling: 8 (1/1/2023) → 12 (1/1/2024) → **15 (7/1/2025)**. |
+| **Care 4 Kids** | **Yes, on the child only** | "the child must be a United States citizen, a national of the United States … or an eligible non-citizen who is a lawfully residing immigrant"; parents must disclose and verify the *child's* status. **"The citizenship status of the child's parents or other family members is not taken into consideration"** — https://www.ctoec.org/care-4-kids-regulations/ |
+| **CEAP** | **Yes**, with SNAP's exact shape | FFY2027 LIHEAP allocation plan §V.J–K: "Non-qualified aliens are not eligible for CEAP benefits. However, other household members who are either qualified aliens or citizens may be eligible" / "Non-qualified aliens shall not be included as part of the household when determining eligibility for CEAP benefits; **however, income from non-qualified aliens is required to be included**". SSNs required for all household members, with exceptions for those who have applied but not received one, and battered spouses / trafficking victims — https://portal.ct.gov/dss/-/media/departments-and-agencies/dss/winter-heating-assistance/ffy-27-liheap-allocation-plan.pdf |
+| **CT Elderly/Disabled Renters' Rebate** | **No — genuinely status-blind** | OPM's stated eligibility is age 65+ / 50+ surviving spouse / 18+ on SSDI, a one-year state residency requirement, and the income limits — https://portal.ct.gov/opm/igpp/grants/tax-relief-grants/renters--rebate-for-elderly-disabled-renters-tax-relief-program. The full text of the 2026 OPM Q&A booklet was searched for *citizen / immigrat / alien*: **zero hits** — https://portal.ct.gov/opm/-/media/opm/igpp-data-grants-mgmt/q-and-a-tax-relief-booklets/renters-rebate-qa-booklet.pdf |
+| **Lifeline** (keychain) | **No formal status test**; practical SSN bar | 47 CFR § 54.410 contains no citizenship or immigration requirement, but requires "the last four digits of the subscriber's social security number, or the subscriber's Tribal identification number, if the subscriber is a member of a Tribal nation and does not have a social security number" — https://www.law.cornell.edu/cfr/text/47/54.410. The Medicaid/SNAP participation route is transitively status-dependent; the 135% FPG income route is not. |
+| **Eversource / UI low-income discount rate** (keychain) | **UNVERIFIED** | Income route appears status-blind; no explicit statement found. Program-participation route is transitively status-dependent. |
+| **Museums for All** (keychain) | Transitively status-dependent | Requires an EBT (or Medicaid) card. |
+
+### Two nuances the coarse implementation papers over
+
+- **CT EITC's predicate is not SNAP's predicate.** SNAP turns on immigration *category*; CT EITC turns on holding an SSN valid for employment. A work-authorised non-LPR (many EAD holders) fails SNAP and passes CT EITC. One household-level "status" answer cannot answer both questions correctly.
+- **The eligible-category lists are effective-dated and moving.** SNAP's narrowed 2025-11; Medicaid's narrows **2026-10-01**. If status ever becomes scorable, the category table belongs in `EffectiveDated` like the SNAP income limits, not in a constant.
+
+### What this costs a mixed-status family with citizen children
+
+Four of the five status-dependent Programs above are, in law, available to such a family: SNAP (children eligible, parent dropped from unit, income counted), State HUSKY A/B (children 0-15 covered *because* they lack status), Care 4 Kids (parents' status explicitly disregarded), and CEAP (same structure as SNAP). Sending status-dependent Programs to Indeterminate wholesale therefore erases close to the entire map for exactly the household ADR-0004 was written to protect. ADR-0004 (as amended) records the same measurement.
+
+---
+
+## 9 · Review of `docs/market-research.md` — errors, staleness, and risks
 
 Reviewed against the verified figures above. Ordered by how much damage each does on stage.
 
@@ -467,7 +529,7 @@ Reviewed against the verified figures above. Ordered by how much damage each doe
 
 ---
 
-## 9 · Source index
+## 10 · Source index
 
 **CT DSS**
 - Program Standards Chart (as of 7/1/2026) — SNAP, TFA, HUSKY A/B/C/D, MSP, SSI, deductions, asset limits: https://portal.ct.gov/dss/-/media/departments-and-agencies/dss/fact-sheets-and-issue-briefs/fact-sheets/dss-program-standards-chart-effective-070126.pdf
@@ -484,7 +546,9 @@ Reviewed against the verified figures above. Ordered by how much damage each doe
 
 **CT OEC / Care 4 Kids** — new-application income guidelines: https://www.ctcare4kids.com/income-guidelines-for-new-applications/ · redetermination: https://www.ctcare4kids.com/income-guidelines-for-redeterminations/ · enrollment list status: https://www.ctcare4kids.com/provider-information/status/waitlist/ · family fee: https://www.ctcare4kids.com/family-share/ · payment rates: https://www.ctcare4kids.com/provider-information/payment-rates/ · eligibility updates: https://www.ctcare4kids.com/important-updates-to-care-4-kids-eligibility/ · state page: https://portal.ct.gov/oec/care4kids
 
-**USDA FNS** — SNAP eligibility, limits, allotments, formula: https://www.fns.usda.gov/snap/recipient/eligibility · COLA index: https://www.fns.usda.gov/snap/allotment/COLA
+**USDA FNS** — SNAP eligibility, limits, allotments, formula: https://www.fns.usda.gov/snap/recipient/eligibility · COLA index: https://www.fns.usda.gov/snap/allotment/COLA · OBBB alien eligibility: https://www.fns.usda.gov/snap/obbb-alien-eligibility · non-citizen policy: https://www.fns.usda.gov/snap/eligibility/citizen/non-citizen-policy · *SNAP Guidance on Non-Citizen Eligibility* (June 2011), NILC mirror: https://media.nilc.org/wp-content/uploads/2019/05/Non-Citizen_Guidance_063011.pdf
+
+**Immigration status (§8)** — 7 CFR 273.11(c)(3) via Cornell LII: https://www.law.cornell.edu/cfr/text/7/273.11 · 47 CFR 54.410 via Cornell LII: https://www.law.cornell.edu/cfr/text/47/54.410 · CT DSS State HUSKY A / HUSKY B for Children: https://portal.ct.gov/dss/health-and-home-care/state-husky-a-and-husky-b-for-children-health-coverage · CT HUSKY how to qualify: https://portal.ct.gov/husky/how-to-qualify · CT OEC Care 4 Kids regulations: https://www.ctoec.org/care-4-kids-regulations/ · IRS EITC qualification: https://www.irs.gov/credits-deductions/individuals/earned-income-tax-credit/who-qualifies-for-the-earned-income-tax-credit-eitc · End Hunger CT! immigrant & mixed-status families (secondary): https://endhungerct.org/ehc-snap-series-immigrant-mixed-status-families/
 
 **IRS** — EITC tables: https://www.irs.gov/credits-deductions/individuals/earned-income-tax-credit/earned-income-and-earned-income-tax-credit-eitc-tables · Rev. Proc. 2024-40: https://www.irs.gov/pub/irs-drop/rp-24-40.pdf · Pub. 596 (2025): https://www.irs.gov/pub/irs-pdf/p596.pdf
 

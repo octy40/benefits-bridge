@@ -130,8 +130,39 @@ export type HouseholdProfile = {
    * Optional, always. A Resident who declines still gets an eligibility map;
    * status-dependent Programs report `indeterminate` (ADR-0004).
    */
-  immigrationStatusShared?: boolean;
+  immigrationStatus?: ImmigrationStatusAnswer;
 };
+
+/**
+ * The household's answer to the one question BenefitBridge asks and never
+ * requires.
+ *
+ * Absent and answered mean different things, and the difference is the whole
+ * point of the field — the same distinction `incomeSources` draws, for the same
+ * reason. `undefined` is "nobody has asked yet"; every other value means the
+ * question has been put, and putting it a second time violates ADR-0004.
+ * `"declined"` is therefore load-bearing rather than an absence: it is the only
+ * thing that closes the question without answering it.
+ *
+ * There is deliberately no value meaning "somebody here does not qualify, so
+ * screen them out". This implementation cannot evaluate status per member, and
+ * a mixed-status household is not an ineligible household: under SNAP the
+ * ineligible member is dropped from the Program unit and their income is still
+ * counted (7 CFR 273.11(c)(3)), so the citizen children remain eligible.
+ * `"mixed"` therefore lands on `indeterminate` alongside `"declined"` —
+ * unscorable, not ineligible. Scoring it is per-member evaluation, which is the
+ * correction to this design and not part of it (ADR-0004 as amended).
+ *
+ * What each value does to Screening lives in `immigration-status.ts`, including
+ * the cost of treating `undefined` as scorable.
+ */
+export type ImmigrationStatusAnswer =
+  /** Asked; the Resident chose not to say, or said nothing. */
+  | "declined"
+  /** Every member the Programs would count has a status those Programs recognise. */
+  | "all-qualifying"
+  /** At least one member does not. Indeterminate here, scorable per member later. */
+  | "mixed";
 
 export const emptyHouseholdProfile = (): HouseholdProfile => ({ members: [] });
 
@@ -164,6 +195,10 @@ export type ProgramResult = {
    * Facts needed to score the outcome at all are a different thing: a Program
    * missing one reports no `ProgramResult` and is absent from the map entirely
    * (`program-rule.ts`).
+   *
+   * An `indeterminate` entry carries `[]` and is neither scored nor blocked:
+   * what it lacks is immigration status, which is not a Blocking fact because
+   * Elicitation never goes and gets it (CONTEXT.md, *Blocking fact*; ADR-0004).
    */
   blockedBy: FactId[];
 };
@@ -180,4 +215,19 @@ export type ScreeningResult = {
   headlineAnnualTotal: Money;
   /** Ranked, most Programs blocked first. Drives Elicitation (ADR-0002). */
   blockingFacts: BlockingFact[];
+  /**
+   * The one question that is not on the Blocking facts list.
+   *
+   * Present only while nobody has asked, at least one otherwise-scorable
+   * Program turns on the answer, and `blockingFacts` is empty — so the two
+   * agendas never compete and ADR-0002's single-agenda property stays true at
+   * every point in the conversation. Absent forever after anything is recorded,
+   * including a decline.
+   *
+   * `blocks` names the Programs the answer would move, so the reason can be
+   * stated when the question is put. ADR-0004 requires the reason; a question
+   * whose reason the conversation had to invent is the one that reads as a
+   * demand.
+   */
+  statusQuestion?: { blocks: ProgramId[] };
 };

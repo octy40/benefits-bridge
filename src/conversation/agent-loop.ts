@@ -39,6 +39,18 @@ export type ConversationState = {
   profile: HouseholdProfile;
   /** The live eligibility map. Its `sequence` is the conversation's counter. */
   screening: ScreeningResult;
+  /**
+   * Whether a tool result has already offered the optional immigration status
+   * question.
+   *
+   * The rules module reports that the question is *open*; only the conversation
+   * can know it has already been *put*, exactly as it owns the `sequence`
+   * counter that `screen` is handed rather than derives. Once this is set the
+   * question is dropped from every later tool result, so "asked at most once"
+   * holds even if the model never records an answer — which is the residual gap
+   * `facts-tool.ts` names and this is the guard against (ADR-0004).
+   */
+  statusQuestionOffered: boolean;
 };
 
 export type TurnHandlers = {
@@ -57,6 +69,7 @@ export function newConversation(asOf: string): ConversationState {
     messages: [],
     profile: emptyHouseholdProfile(),
     screening: screen(emptyHouseholdProfile(), asOf, 0),
+    statusQuestionOffered: false,
   };
 }
 
@@ -109,14 +122,23 @@ export async function sendResidentMessage(
       const previous = next.screening;
       const profile = mergeFacts(next.profile, toolUse.input as RecordedFacts);
       const screening = screen(profile, asOf, previous.sequence + 1);
+      const alreadyOffered = next.statusQuestionOffered;
 
-      next = { ...next, profile, screening };
+      next = {
+        ...next,
+        profile,
+        screening,
+        // Spent the moment a result carries it, not when an answer comes back.
+        // A Resident who says nothing has still been asked, and asking again is
+        // the thing ADR-0004 forbids.
+        statusQuestionOffered: alreadyOffered || screening.statusQuestion !== undefined,
+      };
       handlers.onScreening(screening);
 
       results.push({
         type: "tool_result",
         tool_use_id: toolUse.id,
-        content: JSON.stringify(buildEligibilityMapToolResult(screening, previous)),
+        content: JSON.stringify(buildEligibilityMapToolResult(screening, previous, alreadyOffered)),
       });
     }
 

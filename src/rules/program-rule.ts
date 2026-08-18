@@ -19,6 +19,22 @@ export type ProgramScreening = {
   programId: ProgramId;
   result?: ProgramResult;
   blockedBy: FactId[];
+  /**
+   * This Program's rules turn on immigration status, the household has not been
+   * asked, and the answer is the only thing left between here and a scored
+   * entry.
+   *
+   * Deliberately not a `FactId`. A Blocking fact is something Elicitation goes
+   * and gets until it has it; this is the one thing BenefitBridge may ask for
+   * once and must never chase (CONTEXT.md, *Blocking fact*; ADR-0004). Put on
+   * the ranked list it would be re-asked every turn, because a declined status
+   * never arrives and so never leaves the list.
+   *
+   * Set by `statusDependent` in `immigration-status.ts` rather than by each
+   * Program, so the short-circuit is written once: a Program that forgot it
+   * would look like a correct score.
+   */
+  awaitingStatus?: boolean;
 };
 
 export type ProgramRule = (profile: HouseholdProfile, asOf: IsoDate) => ProgramScreening;

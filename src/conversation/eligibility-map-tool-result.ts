@@ -1,5 +1,5 @@
 import { formatMoney, formatMoneyDelta } from "@/money";
-import type { ProgramResult, ScreeningResult } from "@/rules/types";
+import type { Outcome, ProgramResult, ScreeningResult } from "@/rules/types";
 
 /**
  * What the model sees after every `record_household_facts` call.
@@ -28,11 +28,23 @@ export type EligibilityMapToolResult = {
   programs: EligibilityMapEntry[];
   keychain: EligibilityMapEntry[];
   blockingFacts: { factId: string; blocksPrograms: string[]; blocksCount: number }[];
+  /**
+   * The one question that is not on `blockingFacts`, present only while it is
+   * open. It carries its own instructions for the same reason `supersedes`
+   * does: a rule the model has to remember across a long conversation decays,
+   * and a rule restated by every result it applies to does not (ADR-0004).
+   */
+  statusQuestion?: { blocksPrograms: string[]; howToAsk: string };
 };
 
 export type EligibilityMapEntry = {
   programId: string;
-  outcome: string;
+  /**
+   * The rules module's own union rather than a bare string, so what the model
+   * is shown is checked against what Screening can produce — `indeterminate`
+   * included, which is the outcome that most needs explaining to it.
+   */
+  outcome: Outcome;
   countedMembers: string[];
   annual?: string;
   monthly?: string;
@@ -43,9 +55,17 @@ export type EligibilityMapEntry = {
   blockedBy: string[];
 };
 
+/**
+ * `statusQuestionAlreadyOffered` is required rather than defaulted, for the
+ * reason `screen`'s `sequence` is: a caller who forgot it would put the one
+ * optional question to the Resident twice, which is the ADR-0004 violation this
+ * plumbing exists to make structurally impossible. The rules module reports
+ * that the question is *open*; only the conversation knows it has been *put*.
+ */
 export function buildEligibilityMapToolResult(
   current: ScreeningResult,
   previous: ScreeningResult,
+  statusQuestionAlreadyOffered: boolean,
 ): EligibilityMapToolResult {
   return {
     sequence: current.sequence,
@@ -63,6 +83,20 @@ export function buildEligibilityMapToolResult(
       blocksPrograms: fact.blocks,
       blocksCount: fact.blocks.length,
     })),
+    ...(current.statusQuestion && !statusQuestionAlreadyOffered
+      ? {
+          statusQuestion: {
+            blocksPrograms: current.statusQuestion.blocks,
+            howToAsk:
+              "You may ask about immigration status once, and only while this field is here. Say " +
+              "why you are asking — these Programs turn on it — and say plainly that they can " +
+              "decline and still get their results. Then call this tool with " +
+              "`immigrationStatus`: 'all-qualifying', 'mixed', or 'declined' if they would rather " +
+              "not say. This field will not appear again, and the question must not be asked " +
+              "again.",
+          },
+        }
+      : {}),
   };
 }
 

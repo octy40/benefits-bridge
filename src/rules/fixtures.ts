@@ -112,3 +112,37 @@ export const mariaBeforeHerMother: HouseholdProfile = {
   monthlyRent: 160_000,
   utilitiesPaid: ["heat", "electricity"],
 };
+
+/**
+ * Maria, having been asked about immigration status and declined.
+ *
+ * The same household as `mariaBeforeHerMother` in every other respect, which is
+ * the point: it is the pair, not this fixture alone, that shows what the coarse
+ * implementation does. Unasked, this household is likely eligible for $573 a
+ * month and the headline says $6,876 a year. Declined, SNAP is Indeterminate,
+ * carries no figure, and the headline is $0 — because `headlineTotal` sums only
+ * likely-eligible entries, which is what stops an entry BenefitBridge cannot
+ * put either way from being counted as money owed.
+ *
+ * That drop is also the honest measure of what declining costs on today's
+ * Program list, and it is close to everything. ADR-0004 (as amended) records
+ * why: four of the five status-dependent Programs BenefitBridge means to screen
+ * are, in law, available to a mixed-status family with citizen children, and
+ * the household-level question cannot see that.
+ *
+ * **What this fixture cannot yet demonstrate, named rather than faked.** The
+ * ticket asks that status-blind Programs still be scored and the headline still
+ * be produced from them. SNAP is the only implemented Program and it is
+ * status-dependent, so there is no "the rest" and the correct headline here is
+ * $0. The only genuinely status-blind Program on BenefitBridge's list is the CT
+ * Elderly/Disabled Renters' Rebate (`docs/ct-program-facts.md` §6, §8), which
+ * belongs to issue #17 and is blocked behind issue #10. When it lands, this
+ * fixture should assert a non-zero headline built from it alongside an
+ * Indeterminate SNAP. A stub Program added here to make that assertion pass
+ * today would be worse than the gap — `fixtures.ts` exists so the demo and the
+ * suite cannot drift, and a fake Program drifts them both from reality.
+ */
+export const declinedStatusHousehold: HouseholdProfile = {
+  ...mariaBeforeHerMother,
+  immigrationStatus: "declined",
+};
