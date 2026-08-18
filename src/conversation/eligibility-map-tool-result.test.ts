@@ -44,6 +44,49 @@ describe("buildEligibilityMapToolResult", () => {
     expect(result.programs[0]!.monthly).toBe("$300");
   });
 
+  it("names the period a figure was published for, alongside the figure", () => {
+    const labelled: ScreeningResult = {
+      ...mapWithSnap(1, 687_600, 57_300),
+      programs: [
+        {
+          programId: "snap",
+          outcome: "likely-eligible",
+          unit: ["self"],
+          figures: {
+            annual: 687_600,
+            monthly: 57_300,
+            basis: "FY2026 figures (October 2025 – September 2026)",
+          },
+          blockedBy: [],
+        },
+      ],
+    };
+
+    // So a Resident asking "is that this year's number?" gets an answer the
+    // model transcribes rather than one it recalls.
+    expect(buildEligibilityMapToolResult(labelled, emptyMap(0)).programs[0]!.figuresBasis).toBe(
+      "FY2026 figures (October 2025 – September 2026)",
+    );
+  });
+
+  it("shows an entry that is scored but still waiting on a figure", () => {
+    // SNAP knows a household is likely eligible before it knows their rent. The
+    // model has to be able to say so — and must not be handed a figure for it.
+    const tierTwo: ScreeningResult = {
+      ...emptyMap(1),
+      programs: [
+        { programId: "snap", outcome: "likely-eligible", unit: ["self"], blockedBy: ["rent"] },
+      ],
+    };
+
+    const entry = buildEligibilityMapToolResult(tierTwo, emptyMap(0)).programs[0]!;
+
+    expect(entry.outcome).toBe("likely-eligible");
+    expect(entry.blockedBy).toEqual(["rent"]);
+    expect(entry).not.toHaveProperty("annual");
+    expect(entry).not.toHaveProperty("monthly");
+  });
+
   it("passes monthly figures through rather than deriving them from the annual", () => {
     // A SNAP allotment is a monthly amount times twelve, not an annual amount
     // divided by it. When the rules module has not derived a monthly figure,

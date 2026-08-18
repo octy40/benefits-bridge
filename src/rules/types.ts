@@ -18,7 +18,13 @@ export type MemberId = string;
  * construction: a Program cannot declare itself blocked on a fact Elicitation
  * has no place for.
  */
-export type FactId = "household-members" | "food-sharing" | "income-sources" | "work-hours";
+export type FactId =
+  | "household-members"
+  | "food-sharing"
+  | "income-sources"
+  | "work-hours"
+  | "rent"
+  | "utility-costs";
 
 /** Identifier for a Program or Keychain entry, e.g. `snap`, `ct-eitc`, `lifeline`. */
 export type ProgramId = string;
@@ -56,6 +62,32 @@ export type IncomeSource = {
 };
 
 /**
+ * A utility a household pays for separately from its rent.
+ *
+ * Closed rather than `string` because SNAP's utility allowance turns on
+ * *which* ones: a heating or cooling cost buys the Standard Utility Allowance,
+ * two or more other utilities buy the Limited one, and a phone bill alone buys
+ * the Telephone allowance (7 CFR 273.9(d)(6)(iii)). A free-text list would
+ * leave that classification to string matching on whatever the conversation
+ * happened to type.
+ *
+ * `internet` is recordable and deliberately buys nothing: OBBBA (P.L. 119-21)
+ * §10104 bars internet service fees from the shelter deduction. eCFR 273.9 has
+ * not been amended for it and still reads as though internet were allowable —
+ * the statute is the authority here, not the stale regulatory text.
+ */
+export type UtilityPaid =
+  | "heat"
+  | "air-conditioning"
+  | "electricity"
+  | "gas"
+  | "water"
+  | "sewer"
+  | "trash"
+  | "phone"
+  | "internet";
+
+/**
  * One person in the Household profile. Modelled individually because Program
  * rules turn on specific members — a child's exact age, a member being 65 or
  * over, which people purchase and prepare food together.
@@ -85,7 +117,14 @@ export type HouseholdProfile = {
   members: Member[];
   town?: string;
   monthlyRent?: Money;
-  utilitiesPaid?: string[];
+  /**
+   * Absent and empty differ here for the same reason they differ on
+   * `incomeSources`: `undefined` is "nobody has asked yet" and keeps
+   * `utility-costs` on the Blocking facts list; `[]` is "asked, and everything
+   * is included in the rent" and unblocks the allotment with a utility
+   * allowance of nothing.
+   */
+  utilitiesPaid?: UtilityPaid[];
   programsAlreadyReceived?: ProgramId[];
   /**
    * Optional, always. A Resident who declines still gets an eligibility map;
@@ -103,11 +142,29 @@ export type ProgramResult = {
   outcome: Outcome;
   /** Who *this* Program counted. Differs per Program by design (ADR-0003). */
   unit: MemberId[];
-  /** Absent means tier 2 on the eligibility map. */
-  figures?: { monthly?: Money; annual: Money };
+  /**
+   * Absent means tier 2 on the eligibility map. Every derived form the
+   * conversation might need is here, because the model may not divide or sum
+   * (ADR-0010) — `basis` included, so a figure is never quoted without the
+   * period the agency published it for.
+   */
+  figures?: { monthly?: Money; annual: Money; basis?: string };
   noFigureReason?: NoFigureReason;
   waitlist?: { typicalWaitMonths: number; invitingApplicationsReceivedBy: IsoDate };
-  /** Empty once scored. */
+  /**
+   * The facts this entry is still waiting on.
+   *
+   * Empty when the entry is complete. Non-empty on an entry that nonetheless
+   * has an `outcome` means the *outcome* is settled and the *figure* is not:
+   * SNAP knows a household is likely eligible long before it knows their rent.
+   * Such an entry sits in tier 2 with no `figures` and moves to tier 1 when the
+   * fact lands, which is what makes the map read as refinement rather than as
+   * a number that will not sit still.
+   *
+   * Facts needed to score the outcome at all are a different thing: a Program
+   * missing one reports no `ProgramResult` and is absent from the map entirely
+   * (`program-rule.ts`).
+   */
   blockedBy: FactId[];
 };
 

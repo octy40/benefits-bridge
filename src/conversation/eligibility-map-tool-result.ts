@@ -36,6 +36,8 @@ export type EligibilityMapEntry = {
   countedMembers: string[];
   annual?: string;
   monthly?: string;
+  /** The period the agency published these figures for, e.g. FY2026. */
+  figuresBasis?: string;
   noFigureReason?: string;
   waitlist?: { typicalWaitMonths: number; invitingApplicationsReceivedBy: string };
   blockedBy: string[];
@@ -78,6 +80,10 @@ function toEntry(program: ProgramResult): EligibilityMapEntry {
     ...(program.figures?.monthly !== undefined
       ? { monthly: formatMoney(program.figures.monthly) }
       : {}),
+    // Carried alongside the figures rather than left to the prompt, so a
+    // Resident asking "is that this year's number?" gets an answer the model
+    // transcribes instead of one it recalls.
+    ...(program.figures?.basis ? { figuresBasis: program.figures.basis } : {}),
     ...(program.noFigureReason ? { noFigureReason: program.noFigureReason } : {}),
     ...(program.waitlist ? { waitlist: program.waitlist } : {}),
     blockedBy: program.blockedBy,

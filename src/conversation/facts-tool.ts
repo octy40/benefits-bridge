@@ -4,6 +4,7 @@ import type {
   IncomeType,
   Member,
   Money,
+  UtilityPaid,
 } from "@/rules/types";
 
 /**
@@ -35,7 +36,7 @@ export type RecordedFacts = {
   members?: RecordedMember[];
   town?: string;
   monthlyRentDollars?: number;
-  utilitiesPaid?: string[];
+  utilitiesPaid?: UtilityPaid[];
   programsAlreadyReceived?: string[];
   immigrationStatusShared?: boolean;
 };
@@ -118,12 +119,31 @@ export const recordHouseholdFactsTool = {
       town: { type: "string", description: "The town or city the household lives in." },
       monthlyRentDollars: {
         type: "number",
-        description: "Dollars of rent per month, exactly as stated. Do not convert it.",
+        description:
+          "Dollars of rent per month, exactly as stated. Do not convert it. Needed to work out " +
+          "what SNAP is worth, so a household that has not given it yet shows up with no figure.",
       },
       utilitiesPaid: {
         type: "array",
-        items: { type: "string" },
-        description: "Which utilities the household pays separately from rent, e.g. 'heat', 'electricity'.",
+        items: {
+          type: "string",
+          enum: [
+            "heat",
+            "air-conditioning",
+            "electricity",
+            "gas",
+            "water",
+            "sewer",
+            "trash",
+            "phone",
+            "internet",
+          ],
+        },
+        description:
+          "Which utilities the household pays for separately from their rent. Whether they pay " +
+          "for heating matters most, so ask about it rather than about 'utilities'. Send an empty " +
+          "array for a household whose rent covers everything: leaving this out means nobody has " +
+          "asked yet, and SNAP keeps waiting on it before it can show a figure.",
       },
       programsAlreadyReceived: {
         type: "array",
