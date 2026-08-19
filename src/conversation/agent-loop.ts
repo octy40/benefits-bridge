@@ -3,7 +3,8 @@ import { emptyHouseholdProfile, type HouseholdProfile, type ScreeningResult } fr
 import { collectAssistantTurn, type AssistantContentBlock } from "./anthropic-stream";
 import { buildEligibilityMapToolResult } from "./eligibility-map-tool-result";
 import { mergeFacts, recordHouseholdFactsTool, type RecordedFacts } from "./facts-tool";
-import { SYSTEM_PROMPT } from "./system-prompt";
+import { buildSystemPrompt, languageSwitchInstruction } from "./system-prompt";
+import type { Language } from "@/ui/copy";
 
 /**
  * The agent loop, running on the Resident's device.
@@ -51,6 +52,15 @@ export type ConversationState = {
    * `facts-tool.ts` names and this is the guard against (ADR-0004).
    */
   statusQuestionOffered: boolean;
+  /**
+   * The language the Resident is being spoken to in.
+   *
+   * It lives on the conversation rather than only in the interface because it
+   * is two different things at once: what the translation table is keyed on —
+   * which flips instantly, with no model involved at all — and what the system
+   * prompt tells the model to speak, which does not.
+   */
+  language: Language;
 };
 
 export type TurnHandlers = {
@@ -64,12 +74,13 @@ export type TurnHandlers = {
   onScreening: (screening: ScreeningResult) => void;
 };
 
-export function newConversation(asOf: string): ConversationState {
+export function newConversation(asOf: string, language: Language = "en"): ConversationState {
   return {
     messages: [],
     profile: emptyHouseholdProfile(),
     screening: screen(emptyHouseholdProfile(), asOf, 0),
     statusQuestionOffered: false,
+    language,
   };
 }
 
@@ -88,16 +99,72 @@ export async function sendResidentMessage(
   handlers: TurnHandlers,
   signal?: AbortSignal,
 ): Promise<ConversationState> {
-  let next: ConversationState = {
-    ...state,
-    messages: [...state.messages, { role: "user", content: text }],
-  };
+  return runTurns(
+    { ...state, messages: [...state.messages, { role: "user", content: text }] },
+    asOf,
+    handlers,
+    signal,
+  );
+}
+
+/**
+ * Switches the language the conversation is held in. Returns the state to keep;
+ * the input state is left untouched.
+ *
+ * Two halves, and only one of them costs anything. The eligibility map and every
+ * word of interface chrome come from the translation table and re-render on the
+ * spot — that is a direct consequence of the map rendering from `ScreeningResult`
+ * and from nothing else, with no model-authored text on it to send away and have
+ * translated (ADR-0001). What the model *said* is a different matter: it is
+ * model-authored by definition, so the last thing it said is asked for again in
+ * the new language.
+ *
+ * Only the last thing. Earlier turns stay exactly as they were said — nothing
+ * already in `messages` is edited — so a Resident scrolling back sees the
+ * conversation they actually had, and so does the model.
+ */
+export async function switchLanguage(
+  state: ConversationState,
+  language: Language,
+  asOf: string,
+  handlers: TurnHandlers,
+  signal?: AbortSignal,
+): Promise<ConversationState> {
+  if (language === state.language) return state;
+
+  const next: ConversationState = { ...state, language };
+
+  // Nothing has been said yet, so there is nothing to re-narrate and no reason
+  // to spend a round trip: the opener is interface chrome and has already
+  // flipped. The next turn will be in the new language because the system
+  // prompt now says so.
+  if (!next.messages.some((message) => message.role === "assistant")) return next;
+
+  return runTurns(
+    {
+      ...next,
+      messages: [...next.messages, { role: "user", content: languageSwitchInstruction(language) }],
+    },
+    asOf,
+    handlers,
+    signal,
+  );
+}
+
+/** Drives the loop until the model stops calling tools. */
+async function runTurns(
+  state: ConversationState,
+  asOf: string,
+  handlers: TurnHandlers,
+  signal?: AbortSignal,
+): Promise<ConversationState> {
+  let next = state;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     handlers.onAssistantTurnStart();
 
     const turn = await collectAssistantTurn(
-      await callModel(next.messages, signal),
+      await callModel(next.messages, next.language, signal),
       handlers.onAssistantText,
     );
 
@@ -148,7 +215,11 @@ export async function sendResidentMessage(
   return next;
 }
 
-async function callModel(messages: ApiMessage[], signal?: AbortSignal): Promise<Response> {
+async function callModel(
+  messages: ApiMessage[],
+  language: Language,
+  signal?: AbortSignal,
+): Promise<Response> {
   // Because the loop is client-driven, the browser re-uploads the whole
   // conversation on every tool call. That taxes exactly the smartphone-only,
   // prepaid-data Resident this is for — a few kilobytes of text per turn, and
@@ -163,7 +234,7 @@ async function callModel(messages: ApiMessage[], signal?: AbortSignal): Promise<
       stream: true,
       thinking: { type: "adaptive" },
       output_config: { effort: EFFORT },
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(language),
       tools: [recordHouseholdFactsTool],
       messages,
     }),
