@@ -21,6 +21,9 @@ import type { ProgramResult, ScreeningResult } from "@/rules/types";
 const PROGRAM_NAMES: Record<string, string> = {
   snap: "SNAP food assistance",
   ceap: "CEAP energy assistance",
+  lifeline: "Lifeline phone & internet discount",
+  lidr: "Utility Low-Income Discount Rate",
+  "museums-for-all": "Museums for All",
 };
 
 /**

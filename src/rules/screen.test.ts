@@ -3,6 +3,7 @@ import {
   ceapCategoricalHousehold,
   ctBbceBoundaryHousehold,
   declinedStatusHousehold,
+  lidrIncomeOnlyHousehold,
   mariaBeforeHerMother,
 } from "./fixtures";
 import { screen } from "./screen";
@@ -57,15 +58,16 @@ describe("screen", () => {
       programs: [],
       keychain: [],
       headlineAnnualTotal: 0,
-      // Nothing is known, so every fact each Program needs is missing. Ranked
-      // by how many Programs each blocks: CEAP has no food-sharing concept of
-      // its own (its unit is the whole household), so `household-members` and
-      // `income-sources` each block both Programs and outrank `food-sharing`,
-      // which blocks only SNAP — exactly ADR-0002's promise that a new
-      // Program starts pulling on the conversation with no prompt change.
+      // Nothing is known, so every fact each Program or Keychain entry needs
+      // is missing. Ranked by how many each blocks: neither CEAP nor a
+      // Keychain rule has a food-sharing concept of its own (each unit is the
+      // whole household), so `household-members` and `income-sources` each
+      // block four entries and outrank `food-sharing`, which blocks only SNAP
+      // — exactly ADR-0002's promise that a new entry starts pulling on the
+      // conversation with no prompt change.
       blockingFacts: [
-        { factId: "household-members", blocks: ["snap", "ceap"] },
-        { factId: "income-sources", blocks: ["snap", "ceap"] },
+        { factId: "household-members", blocks: ["snap", "ceap", "lifeline", "lidr"] },
+        { factId: "income-sources", blocks: ["snap", "ceap", "lifeline", "lidr"] },
         { factId: "food-sharing", blocks: ["snap"] },
       ],
     });
@@ -125,8 +127,24 @@ describe("SNAP under Connecticut's broad-based categorical eligibility", () => {
           blockedBy: [],
         },
       ],
-      keychain: [],
-      // SNAP has no defensible figure yet, so CEAP's is the whole headline.
+      // $43,280.04/year is over Lifeline's 135% FPL ceiling for a household of
+      // three ($36,882): likely-ineligible, no figure. CEAP being
+      // likely-eligible auto-enrols the household in the utility discount
+      // rate regardless — the link `keychain/lidr.ts` reads off `programs`
+      // (`docs/ct-program-facts.md` §7) — so LIDR appears too, priced in a
+      // discount rate rather than cash.
+      keychain: [
+        { programId: "lifeline", outcome: "likely-ineligible", unit: ["self", "child-1", "child-2"], blockedBy: [] },
+        {
+          programId: "lidr",
+          outcome: "likely-eligible",
+          unit: ["self", "child-1", "child-2"],
+          noFigureReason: "coverage-not-cash",
+          blockedBy: [],
+        },
+      ],
+      // SNAP has no defensible figure yet, and neither Keychain entry carries
+      // one either, so CEAP's is the whole headline.
       headlineAnnualTotal: 59_500,
       blockingFacts: [{ factId: "utility-costs", blocks: ["snap"] }],
     });
@@ -231,17 +249,17 @@ describe("the SNAP Program unit", () => {
 describe("Blocking facts", () => {
   it("asks what anyone earns before who eats together, once a second Program wants it too", () => {
     // With only SNAP screening, food-sharing would come first — it is the
-    // fact SNAP needs before it can even ask about income. CEAP has no
-    // food-sharing concept of its own and wants income straight away, so once
-    // it is in the mix `income-sources` blocks two Programs to food-sharing's
-    // one and outranks it. Nothing about SNAP changed; CEAP landing is what
-    // moved this (ADR-0002).
+    // fact SNAP needs before it can even ask about income. CEAP and the
+    // Keychain have no food-sharing concept of their own and want income
+    // straight away, so once they are in the mix `income-sources` blocks more
+    // entries than food-sharing's one and outranks it. Nothing about SNAP
+    // changed; CEAP and the Keychain landing is what moved this (ADR-0002).
     const profile: HouseholdProfile = {
       members: [{ id: "self" }, { id: "mother" }],
     };
 
     expect(screen(profile, ASOF, 0).blockingFacts).toEqual([
-      { factId: "income-sources", blocks: ["snap", "ceap"] },
+      { factId: "income-sources", blocks: ["snap", "ceap", "lifeline", "lidr"] },
       { factId: "food-sharing", blocks: ["snap"] },
     ]);
   });
@@ -251,7 +269,7 @@ describe("Blocking facts", () => {
     const asked: HouseholdProfile = { members: [member("self")] };
 
     expect(screen(unasked, ASOF, 0).blockingFacts).toEqual([
-      { factId: "income-sources", blocks: ["snap", "ceap"] },
+      { factId: "income-sources", blocks: ["snap", "ceap", "lifeline", "lidr"] },
     ]);
     // The asked household is scored; what it is still missing is the shelter
     // costs that price the allotment, never income.
@@ -265,9 +283,10 @@ describe("Blocking facts", () => {
     };
 
     const result = screen(profile, ASOF, 0);
-    expect(result.blockingFacts).toEqual([{ factId: "work-hours", blocks: ["snap", "ceap"] }]);
+    expect(result.blockingFacts).toEqual([{ factId: "work-hours", blocks: ["snap", "ceap", "lifeline", "lidr"] }]);
     // Blocked means absent from the map, never present with a guess.
     expect(result.programs).toEqual([]);
+    expect(result.keychain).toEqual([]);
   });
 
   it("stops reporting a fact once the conversation has produced it", () => {
@@ -370,10 +389,29 @@ describe("the SNAP monthly allotment", () => {
           blockedBy: [],
         },
       ],
-      keychain: [],
-      // The first tier-1 figures, and therefore the first headline that is not
-      // zero. Every derived form is here so the model never divides (ADR-0010).
-      headlineAnnualTotal: 764_600,
+      // $24,864/year also clears Lifeline's 135% FPL ceiling ($36,882): a
+      // second tier-1 figure, $111 a year flat. CEAP being likely-eligible
+      // auto-enrols the household in the utility discount rate too
+      // (`keychain/lidr.ts` reads CEAP's outcome off `programs`), priced in a
+      // discount rate rather than cash.
+      keychain: [
+        {
+          programId: "lifeline",
+          outcome: "likely-eligible",
+          unit: ["self", "child-1", "child-2"],
+          figures: { monthly: 925, annual: 11_100, basis: "FCC/USAC Lifeline monthly support (2026 guidelines)" },
+          blockedBy: [],
+        },
+        {
+          programId: "lidr",
+          outcome: "likely-eligible",
+          unit: ["self", "child-1", "child-2"],
+          noFigureReason: "coverage-not-cash",
+          blockedBy: [],
+        },
+      ],
+      // SNAP's, CEAP's, and now Lifeline's figures together.
+      headlineAnnualTotal: 775_700,
       blockingFacts: [],
       // Nothing is left to ask, so the one optional question opens — and only
       // now, so it never competes with the ranked list (ADR-0002, ADR-0004).
@@ -405,9 +443,9 @@ describe("the SNAP monthly allotment", () => {
     const tierOne = screen(mariaBeforeHerMother, ASOF, 3);
     expect(tierOne.programs[0]!.figures!.annual).toBe(687_600);
     expect(tierOne.programs[0]!.blockedBy).toEqual([]);
-    // CEAP's own figure ($770) is on the map by now too, so the headline is
-    // SNAP's and CEAP's together.
-    expect(tierOne.headlineAnnualTotal).toBe(764_600);
+    // CEAP's own figure ($770) and Lifeline's ($111) are on the map by now
+    // too, so the headline is all three together.
+    expect(tierOne.headlineAnnualTotal).toBe(775_700);
   });
 
   it("gives a household whose rent covers everything no utility allowance", () => {
@@ -538,12 +576,17 @@ describe("Indeterminate: the optional immigration status question", () => {
    */
   it("scores a household nobody has asked, and cannot score the same household once it declines", () => {
     expect(screen(mariaBeforeHerMother, ASOF, 1).programs[0]!.figures!.annual).toBe(687_600);
-    // SNAP's $6,876 plus CEAP's $770 — both status-dependent, both live once
-    // nobody has been asked.
-    expect(screen(mariaBeforeHerMother, ASOF, 1).headlineAnnualTotal).toBe(764_600);
+    // SNAP's $6,876 plus CEAP's $770 plus Lifeline's $111 — SNAP and CEAP are
+    // status-dependent and live once nobody has been asked; Lifeline is not
+    // status-dependent at all (`docs/ct-program-facts.md` §7) and scores the
+    // same either way.
+    expect(screen(mariaBeforeHerMother, ASOF, 1).headlineAnnualTotal).toBe(775_700);
 
     expect(screen(declinedStatusHousehold, ASOF, 1).programs[0]!.figures).toBeUndefined();
-    expect(screen(declinedStatusHousehold, ASOF, 1).headlineAnnualTotal).toBe(0);
+    // SNAP and CEAP drop out, but Lifeline's $111 does not — declining the
+    // immigration status question costs nothing on a Keychain entry that
+    // never asked about it.
+    expect(screen(declinedStatusHousehold, ASOF, 1).headlineAnnualTotal).toBe(11_100);
   });
 
   it("reports a status-dependent Program as indeterminate when the Resident declines", () => {
@@ -570,19 +613,44 @@ describe("Indeterminate: the optional immigration status question", () => {
           blockedBy: [],
         },
       ],
-      keychain: [],
+      // Neither Keychain rule here is status-dependent (`docs/ct-program-facts.md`
+      // §7 marks Lifeline's status test practically nonexistent and LIDR
+      // unverified either way, so BenefitBridge implements neither). Lifeline
+      // scores off income exactly as it would for an unasked household. LIDR's
+      // usual auto-enrollment route reads CEAP's outcome (`keychain/lidr.ts`)
+      // and CEAP is Indeterminate here, so that route is closed — but LIDR's
+      // own income test is not: $24,864/year clears its 50% tier ceiling
+      // (100% FPL for a household of three, $27,320) on its own.
+      keychain: [
+        {
+          programId: "lifeline",
+          outcome: "likely-eligible",
+          unit: ["self", "child-1", "child-2"],
+          figures: { monthly: 925, annual: 11_100, basis: "FCC/USAC Lifeline monthly support (2026 guidelines)" },
+          blockedBy: [],
+        },
+        {
+          programId: "lidr",
+          outcome: "likely-eligible",
+          unit: ["self", "child-1", "child-2"],
+          noFigureReason: "coverage-not-cash",
+          blockedBy: [],
+        },
+      ],
       // `headlineTotal` sums likely-eligible entries only, so an entry
       // BenefitBridge cannot put either way cannot be counted as money owed.
+      // Lifeline's $111 is the only figure left standing.
       //
       // What this cannot assert, and must not fake: the ticket asks that
       // status-blind Programs still be scored and the headline still be
       // produced from them. SNAP and CEAP are the only implemented Programs
-      // and both are status-dependent, so $0 is the correct headline here.
-      // The CT Elderly/Disabled Renters' Rebate is the only genuinely
-      // status-blind Program on the list (`docs/ct-program-facts.md` §8); it
-      // is issue #17, gated on issue #10, and when it lands this assertion
-      // should carry a non-zero headline alongside two Indeterminate entries.
-      headlineAnnualTotal: 0,
+      // and both are status-dependent, so Lifeline's figure alone is the
+      // correct headline here. The CT Elderly/Disabled Renters' Rebate is the
+      // only genuinely status-blind Program on the list
+      // (`docs/ct-program-facts.md` §8); it is issue #17, gated on issue #10,
+      // and when it lands this assertion should carry a larger headline
+      // alongside two Indeterminate entries.
+      headlineAnnualTotal: 11_100,
       // A declined household is asked for nothing further. Rent and utilities
       // would only price an allotment BenefitBridge cannot say is owed.
       blockingFacts: [],
@@ -610,8 +678,25 @@ describe("Indeterminate: the optional immigration status question", () => {
         { programId: "snap", outcome: "indeterminate", unit: ["self", "child-1", "child-2"], blockedBy: [] },
         { programId: "ceap", outcome: "indeterminate", unit: ["self", "child-1", "child-2"], blockedBy: [] },
       ],
-      keychain: [],
-      headlineAnnualTotal: 0,
+      // Same as the declined case: neither Keychain rule is status-dependent,
+      // and LIDR's own income test still clears its 50% tier on its own.
+      keychain: [
+        {
+          programId: "lifeline",
+          outcome: "likely-eligible",
+          unit: ["self", "child-1", "child-2"],
+          figures: { monthly: 925, annual: 11_100, basis: "FCC/USAC Lifeline monthly support (2026 guidelines)" },
+          blockedBy: [],
+        },
+        {
+          programId: "lidr",
+          outcome: "likely-eligible",
+          unit: ["self", "child-1", "child-2"],
+          noFigureReason: "coverage-not-cash",
+          blockedBy: [],
+        },
+      ],
+      headlineAnnualTotal: 11_100,
       blockingFacts: [],
     });
   });
@@ -645,8 +730,23 @@ describe("Indeterminate: the optional immigration status question", () => {
           blockedBy: [],
         },
       ],
-      keychain: [],
-      headlineAnnualTotal: 764_600,
+      keychain: [
+        {
+          programId: "lifeline",
+          outcome: "likely-eligible",
+          unit: ["self", "child-1", "child-2"],
+          figures: { monthly: 925, annual: 11_100, basis: "FCC/USAC Lifeline monthly support (2026 guidelines)" },
+          blockedBy: [],
+        },
+        {
+          programId: "lidr",
+          outcome: "likely-eligible",
+          unit: ["self", "child-1", "child-2"],
+          noFigureReason: "coverage-not-cash",
+          blockedBy: [],
+        },
+      ],
+      headlineAnnualTotal: 775_700,
       blockingFacts: [],
       // The question is spent, so it is not offered again.
     });
@@ -740,18 +840,27 @@ describe("effective-dated figures", () => {
 
     // CEAP's FFY2027 table has already begun (proposed) where SNAP's FY2026
     // one just ended, so the map holds CEAP's figure rather than nothing.
+    // Lifeline is not effective-dated at all, so its $111 rides along either
+    // way.
     const dayAfter = screen(mariaBeforeHerMother, "2026-10-01", 0);
     expect(programIds(mariaBeforeHerMother, "2026-10-01")).toEqual(["ceap"]);
-    expect(dayAfter.headlineAnnualTotal).toBe(84_500);
+    expect(dayAfter.headlineAnnualTotal).toBe(95_600);
 
     expect(screen(mariaBeforeHerMother, "2025-09-30", 0).programs).toEqual([]);
   });
 
-  it("reports no Blocking facts when no table covers the date at all", () => {
+  it("reports no Blocking facts for either Program when no table covers the date at all", () => {
     // Nothing the Resident could say would unblock either Program, so neither
     // must put a question into the conversation. Before 2025-10-01 is the one
-    // date left where that is true for both SNAP and CEAP at once.
-    expect(screen(emptyHouseholdProfile(), "2025-09-30", 0).blockingFacts).toEqual([]);
+    // date left where that is true for both SNAP and CEAP at once — but the
+    // Keychain is not effective-dated (`keychain/lifeline.ts`,
+    // `keychain/lidr.ts` carry no `EffectiveDated` table), so Lifeline and
+    // LIDR still want to know who is in the household and what it earns
+    // regardless of the date.
+    expect(screen(emptyHouseholdProfile(), "2025-09-30", 0).blockingFacts).toEqual([
+      { factId: "household-members", blocks: ["lifeline", "lidr"] },
+      { factId: "income-sources", blocks: ["lifeline", "lidr"] },
+    ]);
   });
 });
 
@@ -925,5 +1034,173 @@ describe("CEAP energy assistance", () => {
     // does, because CEAP's figure is the only thing in it and it is proposed.
     expect(screen(mariaBeforeHerMother, "2026-09-30", 0).headlineAnnualTotalProvisional).toBeUndefined();
     expect(screen(mariaBeforeHerMother, "2026-10-01", 0).headlineAnnualTotalProvisional).toBe(true);
+  });
+});
+
+describe("Keychain: Lifeline, LIDR, and Museums for All", () => {
+  /**
+   * The fixture issue #21 was written around: a lookup keyed off SNAP
+   * participation would report nothing for this household, because it has
+   * never received SNAP and is over Connecticut's SNAP limit for a household
+   * of one. The utility Low-Income Discount Rate's own, independent income
+   * test reaches further than SNAP's does and catches it anyway.
+   */
+  it("returns a non-empty Keychain for a household SNAP screens out but LIDR's own income test still reaches", () => {
+    const result = screen(lidrIncomeOnlyHousehold, ASOF, 0);
+
+    expect(result.programs.find((program) => program.programId === "snap")!.outcome).toBe("likely-ineligible");
+
+    expect(result.keychain).not.toEqual([]);
+    const lidr = result.keychain.find((entry) => entry.programId === "lidr")!;
+    expect(lidr.outcome).toBe("likely-eligible");
+    expect(lidr.noFigureReason).toBe("coverage-not-cash");
+
+    // $40,000/year clears Lifeline's own, narrower 135% FPL ceiling for a
+    // household of one ($21,546): the fixture is deliberately built so only
+    // LIDR carries the case.
+    const lifeline = result.keychain.find((entry) => entry.programId === "lifeline")!;
+    expect(lifeline.outcome).toBe("likely-ineligible");
+  });
+
+  describe("Lifeline", () => {
+    it("scores likely-eligible from participation alone, income never asked", () => {
+      for (const program of ["snap", "medicaid", "ssi", "federal-public-housing-assistance", "veterans-pension"]) {
+        const household: HouseholdProfile = {
+          members: [{ id: "self" }],
+          programsAlreadyReceived: [program],
+        };
+
+        const lifeline = screen(household, ASOF, 0).keychain.find((entry) => entry.programId === "lifeline")!;
+        expect(lifeline.outcome).toBe("likely-eligible");
+        expect(lifeline.figures).toEqual({
+          monthly: 925,
+          annual: 11_100,
+          basis: "FCC/USAC Lifeline monthly support (2026 guidelines)",
+        });
+      }
+    });
+
+    it("screens the income route at 135% FPL, not a program a household never received", () => {
+      // $21,546 is 135% FPL for a household of one, to the dollar.
+      const atLimit: HouseholdProfile = {
+        members: [{ id: "self", incomeSources: [{ type: "wages", amount: 2_154_600, period: "annual" }] }],
+      };
+      const overLimit: HouseholdProfile = {
+        members: [{ id: "self", incomeSources: [{ type: "wages", amount: 2_154_700, period: "annual" }] }],
+      };
+
+      expect(screen(atLimit, ASOF, 0).keychain.find((entry) => entry.programId === "lifeline")!.outcome).toBe(
+        "likely-eligible",
+      );
+      expect(screen(overLimit, ASOF, 0).keychain.find((entry) => entry.programId === "lifeline")!.outcome).toBe(
+        "likely-ineligible",
+      );
+    });
+  });
+
+  describe("the utility Low-Income Discount Rate (LIDR)", () => {
+    it("scores likely-eligible from program participation alone, income never asked", () => {
+      for (const program of ["snap", "husky", "ssi", "medicaid", "section-8"]) {
+        const household: HouseholdProfile = {
+          members: [{ id: "self" }],
+          programsAlreadyReceived: [program],
+        };
+
+        const lidr = screen(household, ASOF, 0).keychain.find((entry) => entry.programId === "lidr")!;
+        expect(lidr.outcome).toBe("likely-eligible");
+        expect(lidr.blockedBy).toEqual([]);
+      }
+    });
+
+    /**
+     * The auto-enrollment the FFY2027 LIHEAP plan describes
+     * (`docs/ct-program-facts.md` §7): applying for CEAP enrols a household in
+     * LIDR even when neither of LIDR's own routes — its participation list or
+     * its own income test — has anything to go on. TFA is on CEAP's
+     * categorical list but deliberately not on LIDR's own, and income is never
+     * recorded, so LIDR's `likely-eligible` outcome here can only have come
+     * from reading CEAP's outcome off `programs` (`keychain/lidr.ts`).
+     */
+    it("auto-enrols a household the moment CEAP screens likely-eligible, even with no income and no route of its own", () => {
+      const appliedForCeap: HouseholdProfile = {
+        members: [{ id: "self" }],
+        programsAlreadyReceived: ["tfa"],
+      };
+
+      const result = screen(appliedForCeap, ASOF, 0);
+      expect(result.programs.find((program) => program.programId === "ceap")!.outcome).toBe("likely-eligible");
+
+      const lidr = result.keychain.find((entry) => entry.programId === "lidr")!;
+      expect(lidr.outcome).toBe("likely-eligible");
+      expect(lidr.noFigureReason).toBe("coverage-not-cash");
+
+      // Program receipt alone would not have done it: TFA is not on LIDR's
+      // own participation list, and Lifeline's list doesn't carry it either.
+      expect(result.keychain.find((entry) => entry.programId === "lifeline")).toBeUndefined();
+    });
+
+    it("screens the widest income tier at 60% State Median Income, not SNAP's or Lifeline's narrower ceilings", () => {
+      // $48,714 is 60% SMI (FFY2027) for a household of one — LIDR's own
+      // ceiling — to the dollar.
+      const atCeiling: HouseholdProfile = {
+        members: [{ id: "self", incomeSources: [{ type: "wages", amount: 4_871_400, period: "annual" }] }],
+      };
+      const overCeiling: HouseholdProfile = {
+        members: [{ id: "self", incomeSources: [{ type: "wages", amount: 4_871_500, period: "annual" }] }],
+      };
+
+      expect(screen(atCeiling, ASOF, 0).keychain.find((entry) => entry.programId === "lidr")!.outcome).toBe(
+        "likely-eligible",
+      );
+      expect(screen(overCeiling, ASOF, 0).keychain.find((entry) => entry.programId === "lidr")!.outcome).toBe(
+        "likely-ineligible",
+      );
+    });
+
+    // Issue #21's acceptance criteria names this exclusion explicitly: MPP
+    // needs hardship status and a 60-day past-due balance, neither of which
+    // BenefitBridge elicits, so it is not among the Keychain program ids any
+    // household can produce (`keychain/lidr.ts`).
+    it("never screens the Matching Payment Program", () => {
+      const everythingEligible: HouseholdProfile = {
+        ...mariaBeforeHerMother,
+        programsAlreadyReceived: ["snap"],
+      };
+
+      const keychainIds = screen(everythingEligible, ASOF, 0).keychain.map((entry) => entry.programId);
+      expect(keychainIds).not.toContain("matching-payment-program");
+      expect(keychainIds).not.toContain("mpp");
+    });
+  });
+
+  describe("Museums for All", () => {
+    it("derives strictly from SNAP receipt", () => {
+      const receivesSnap: HouseholdProfile = {
+        members: [{ id: "self" }],
+        programsAlreadyReceived: ["snap"],
+      };
+
+      const museums = screen(receivesSnap, ASOF, 0).keychain.find((entry) => entry.programId === "museums-for-all")!;
+      expect(museums.outcome).toBe("likely-eligible");
+      expect(museums.noFigureReason).toBe("coverage-not-cash");
+    });
+
+    it("does not appear for a household merely screened likely-eligible for SNAP, never having received it", () => {
+      // Maria's household is likely-eligible for SNAP on this very map, and
+      // has never recorded receiving it — Museums for All needs the EBT card
+      // in hand, not the screening result (`docs/ct-program-facts.md` §7).
+      const result = screen(mariaBeforeHerMother, ASOF, 0);
+      expect(result.programs.find((program) => program.programId === "snap")!.outcome).toBe("likely-eligible");
+      expect(result.keychain.find((entry) => entry.programId === "museums-for-all")).toBeUndefined();
+    });
+  });
+
+  it("evaluates the Keychain after Programs, and returns it in ScreeningResult.keychain", () => {
+    // Structural: `keychain` is its own field, distinct from `programs`, and
+    // every assertion above already depends on Program outcomes (SNAP, CEAP)
+    // being computed first — this just names the contract issue #21 asks for.
+    const result = screen(ceapCategoricalHousehold, ASOF, 0);
+    expect(result).toHaveProperty("keychain");
+    expect(result.keychain).not.toBe(result.programs);
   });
 });

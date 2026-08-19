@@ -1,4 +1,5 @@
 import { inForceOn, type EffectiveDated } from "../effective-dated";
+import { fplAnnual } from "../fpl";
 import { monthlyTotal, needsWorkHours } from "../income";
 import { statusDependent } from "../immigration-status";
 import type { ProgramRule } from "../program-rule";
@@ -25,26 +26,6 @@ const CATEGORICALLY_ELIGIBLE_PROGRAMS: ProgramId[] = [
   "state-supplement",
   "ssi",
 ];
-
-/**
- * 2026 HHS Poverty Guidelines, 100% FPL, annual — the only FPL vintage this
- * repository has sourced (`docs/ct-program-facts.md` §0). CEAP's own benefit
- * matrix states its bands as percentages of FPL rather than as a
- * dollars-by-household-size table, so this module derives the two lower band
- * edges (125%, 200%) from this table by simple multiplication rather than
- * inventing a second table.
- *
- * Recorded plainly because it is a real approximation and not a citation: the
- * CEAP fact sheet's own income table, which would show exactly which FPL
- * vintage DSS priced the FFY2026 season from, was not machine-extracted. The
- * elsewhere-confirmed cross-check in `docs/ct-program-facts.md` §7 — "the 40%
- * [LIDR] tier is exactly 125% FPG [2026]" — is the best evidence this is the
- * table BenefitBridge is meant to use throughout, not just for LIDR.
- */
-const FPL_100_ANNUAL_BY_HOUSEHOLD_SIZE: Money[] = [
-  1_596_000, 2_164_000, 2_732_000, 3_300_000, 3_868_000, 4_436_000, 5_004_000, 5_572_000,
-];
-const FPL_EACH_ADDITIONAL_MEMBER: Money = 568_000;
 
 type CeapLevel = {
   vulnerableAnnual: Money;
@@ -275,14 +256,6 @@ function smiLimitFor(table: CeapFigures, householdSize: number): Money {
   // in the direction of a lower eligibility ceiling, and named so a reader
   // does not go looking for a ninth row.
   return table.smiLimitByHouseholdSize[table.smiLimitByHouseholdSize.length - 1]!;
-}
-
-function fplAnnual(householdSize: number): Money {
-  const tabulated = FPL_100_ANNUAL_BY_HOUSEHOLD_SIZE[householdSize - 1];
-  if (tabulated !== undefined) return tabulated;
-
-  const largest = FPL_100_ANNUAL_BY_HOUSEHOLD_SIZE[FPL_100_ANNUAL_BY_HOUSEHOLD_SIZE.length - 1]!;
-  return largest + FPL_EACH_ADDITIONAL_MEMBER * (householdSize - FPL_100_ANNUAL_BY_HOUSEHOLD_SIZE.length);
 }
 
 /**
