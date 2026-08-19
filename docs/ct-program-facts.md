@@ -323,12 +323,25 @@ Rev. Proc. 2024-40 does not separately restate the phase-in and phase-out *perce
 
 | Qualifying children | Phase-in rate | Phase-out rate |
 | --- | --- | --- |
-| 0 | $649 / $8,490 = **7.65%** | $649 / ($19,104 − $10,620) = **7.65%** |
-| 1 | $4,328 / $12,730 = **34.00%** | $4,328 / ($50,434 − $23,350) = **15.98%** |
-| 2 | $7,152 / $17,880 = **40.00%** | $7,152 / ($57,310 − $23,350) = **21.06%** |
-| 3+ | $8,046 / $17,880 = **45.00%** | $8,046 / ($61,555 − $23,350) = **21.06%** (rounds from 21.063%) |
+| 0 | $649 / $8,490 = **7.64%** (rounds from 7.6443%) | $649 / ($19,104 − $10,620) = **7.65%** (rounds from 7.6497%) |
+| 1 | $4,328 / $12,730 = **34.00%** (rounds from 33.9984%) | $4,328 / ($50,434 − $23,350) = **15.98%** |
+| 2 | $7,152 / $17,880 = **40.00%** | $7,152 / ($57,310 − $23,350) = **21.06%** (rounds from 21.0601%) |
+| 3+ | $8,046 / $17,880 = **45.00%** | $8,046 / ($61,555 − $23,350) = **21.06%** (rounds from 21.0601%) |
 
-These match the long-standing statutory percentages under § 32(b)(1)(A)–(B) — the derivation above is arithmetic on primary-source figures, not a separate secondary-source claim, and is cross-checked against the published EIC Table below (the table's midpoint-of-bracket method reproduces these rates exactly — see Maria's worked example).
+The statutory rates under § 32(b)(1)(A)–(B) are a flat 7.65% / 34% / 40% / 45% phase-in and 7.65% / 15.98% / 21.06% / 21.06% phase-out — unchanged by the annual inflation adjustment. Dividing back through the *rounded* dollar amounts IRS publishes each year reproduces those rates almost exactly, with one visible exception: the 0-children phase-in cell divides out to 7.64%, not the statutory 7.65%, because $8,490 itself is rounded to the nearest $10 under Rev. Proc. 2024-40's own rounding rule (§ 1(f)(6)) — a $6 pull on an $8,490 base is enough to cross the 7.645% rounding boundary. This is expected rounding noise in the published dollar figures, not an error in the statutory rate, and it is why `screen()` should hold the statutory percentages as the authoritative constant and use the dollar amounts (not a back-divided percentage) as the source of truth for the ceiling/threshold boundaries. Cross-checked against the published EIC Table below — the table's midpoint-of-bracket method is consistent with the statutory rates (see Maria's worked example).
+
+**Full cross-tab by qualifying-child count and filing status**, since issue #9's deliverable asks for all four parameters "by number of qualifying children and by filing status" — the phase-in rate, phase-in ceiling, and phase-out rate are statutorily identical across filing status (only the two threshold/completed amounts move for MFJ), so the repetition below is real, not an omission:
+
+| Qualifying children | Filing status | Phase-in rate | Phase-in ceiling | Phase-out start threshold | Phase-out rate |
+| --- | --- | --- | --- | --- | --- |
+| 0 | Non-MFJ | 7.64% | $8,490 | $10,620 | 7.65% |
+| 0 | MFJ | 7.64% | $8,490 | $17,730 | 7.65% |
+| 1 | Non-MFJ | 34.00% | $12,730 | $23,350 | 15.98% |
+| 1 | MFJ | 34.00% | $12,730 | $30,470 | 15.98% |
+| 2 | Non-MFJ | 40.00% | $17,880 | $23,350 | 21.06% |
+| 2 | MFJ | 40.00% | $17,880 | $30,470 | 21.06% |
+| 3+ | Non-MFJ | 45.00% | $17,880 | $23,350 | 21.06% |
+| 3+ | MFJ | 45.00% | $17,880 | $30,470 | 21.06% |
 
 **Mechanism for `screen()`:** for earned income (or AGI, if greater — the taxpayer must compute both and use the smaller resulting credit when they differ) `x`:
 - If `x < earned income amount`: credit = phase-in rate × x.
@@ -341,11 +354,11 @@ Source: Rev. Proc. 2024-40 §2.06(1) — https://www.irs.gov/pub/irs-drop/rp-24-
 
 ### Maria's actual EITC figure — issue #9 deliverable
 
-**Household:** single parent, two qualifying children (ages 4 and 9), head of household, ~$25,000 earned income (partly cash), no other income — the "before her mother" persona in `CONTEXT.md`/ADR-0007's golden fixtures.
+**Household:** single parent, two qualifying children, head of household, ~$25,000 earned income (partly cash), no other income — the base "Maria" demo persona (`docs/market-research.md` §"Demo persona"; ages 4 and 9 and the "before her mother" framing per issue #9 and issue #1's fixture case 1, "Maria, before her mother").
 
 **Federal EITC:** Maria's income of $25,000 falls in the phase-out region (above the $17,880 ceiling, above the $23,350 non-joint threshold, below the $57,310 non-joint completed-phaseout ceiling for 2 children). Looked up directly from the Pub. 596 (2025) EIC Table, "At least $25,000 but less than $25,050," Single/HoH/QSS column, 2 children: **$6,799**. (Table method: credit is computed off the bracket midpoint, $25,025 → $7,152 − 21.06% × ($25,025 − $23,350) = $7,152 − $352.76 = $6,799.24 → $6,799. The naive formula plugging in the exact $25,000 gives $6,804.51 — close, but the table value is the one that would actually appear on Maria's return.)
 
-**Connecticut EITC:** 40% of the federal credit, plus $250 for having a qualifying child (§5 above): 0.40 × $6,799 = $2,719.60, + $250 = **$2,969.60** (rounds to $2,970 on a whole-dollar return).
+**Connecticut EITC:** 40% of the federal credit, plus $250 for having a qualifying child (see "Connecticut EITC — tax year 2025" below): 0.40 × $6,799 = $2,719.60, + $250 = **$2,969.60** (rounds to $2,970 on a whole-dollar return).
 
 **Combined federal + CT EITC: $6,799 + $2,970 = $9,769.**
 
@@ -371,7 +384,7 @@ Maximum combined federal + CT credit, TY2025 (CT portion computed as 40% of fede
 
 The CT column is *computed* by applying the verified 40% rate and $250 add-on to the verified federal maximums; the DRS page carries a "Max State EITC @40% of Federal" table that agrees with the method.
 
-> Product implication: the market-research doc's "~$3,000 of unclaimed EITC" for the Maria persona (2 kids, $25k) is **confirmed materially low, by roughly 3.3×** — her actual computed combined federal + CT figure is **$9,769** (see Maria's worked example above), not a mid-range approximation off the two-child federal maximum. See §7/§9 for the flag.
+> Product implication: the market-research doc's "~$3,000 of unclaimed EITC" for the Maria persona (2 kids, $25k) is **confirmed materially low, by roughly 3.3×** — her actual computed combined federal + CT figure is **$9,769** (see Maria's worked example above), not a mid-range approximation off the two-child federal maximum. See §9 ("Review of `docs/market-research.md`") for the flag.
 
 ---
 
