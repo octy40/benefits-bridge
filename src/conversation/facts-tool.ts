@@ -31,6 +31,7 @@ export type RecordedMember = {
   relationship?: string;
   sharesFoodPurchaseAndPreparation?: boolean;
   hasDisability?: boolean;
+  isPregnant?: boolean;
   incomeSources?: RecordedIncomeSource[];
 };
 
@@ -78,6 +79,13 @@ export const recordHouseholdFactsTool = {
               description:
                 "Whether this person has a disability. Only ask this when it is still needed to price a " +
                 "figure — a household with a member 60+ or a child under 6 never needs this asked at all.",
+            },
+            isPregnant: {
+              type: "boolean",
+              description:
+                "Whether this person is pregnant. Only record this if the Resident volunteers it — never " +
+                "ask. It can open up HUSKY A coverage at a more generous income line, but it decides " +
+                "nothing for almost every household, so it is not a question to put to someone.",
             },
             incomeSources: {
               type: "array",

@@ -54,6 +54,13 @@ describe("record_household_facts tool definition", () => {
     expect(schema).toContain("state-supplement");
     expect(schema).toContain("hasDisability");
   });
+
+  it("tells the model never to ask about pregnancy, only to record it if offered", () => {
+    const schema = JSON.stringify(recordHouseholdFactsTool.input_schema);
+
+    expect(schema).toContain("isPregnant");
+    expect(schema).toContain("never");
+  });
 });
 
 describe("mergeFacts", () => {
@@ -95,6 +102,15 @@ describe("mergeFacts", () => {
 
     expect(merged.members[0]!.hasDisability).toBe(true);
     expect(merged.members[1]!.hasDisability).toBeUndefined();
+  });
+
+  it("records a member's pregnancy, distinctly from not asking", () => {
+    const merged = mergeFacts(emptyHouseholdProfile(), {
+      members: [{ id: "self", isPregnant: true }, { id: "child-1" }],
+    });
+
+    expect(merged.members[0]!.isPregnant).toBe(true);
+    expect(merged.members[1]!.isPregnant).toBeUndefined();
   });
 
   it("updates a known member without dropping facts it was not told about", () => {

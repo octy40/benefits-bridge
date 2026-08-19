@@ -4,7 +4,9 @@ import { screenLidr } from "./keychain/lidr";
 import { screenMuseumsForAll } from "./keychain/museums-for-all";
 import type { KeychainRule } from "./keychain-rule";
 import type { ProgramRule, ProgramScreening } from "./program-rule";
+import { screenCare4Kids } from "./programs/care-4-kids";
 import { screenCeap } from "./programs/ceap";
+import { screenHuskyA, screenHuskyD } from "./programs/husky";
 import { screenSnap } from "./programs/snap";
 import type {
   BlockingFact,
@@ -23,7 +25,7 @@ import type {
  * because the conversation's agenda comes from what these report themselves
  * blocked on (ADR-0002).
  */
-const PROGRAM_RULES: ProgramRule[] = [screenSnap, screenCeap];
+const PROGRAM_RULES: ProgramRule[] = [screenSnap, screenCeap, screenHuskyA, screenHuskyD, screenCare4Kids];
 
 /**
  * Every Keychain entry BenefitBridge screens, run after `PROGRAM_RULES` for

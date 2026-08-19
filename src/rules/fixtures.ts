@@ -203,3 +203,53 @@ export const lidrIncomeOnlyHousehold: HouseholdProfile = {
   ],
   town: "Stamford",
 };
+
+/**
+ * Denise, alone. $1,500 a month is under HUSKY D's 138% FPL line for a
+ * household of one ($1,836) — a Program with no figure and no dependent child
+ * in the home to route her to HUSKY A instead (`docs/ct-program-facts.md`
+ * §2). Paired with `deniseWithHerSon` below: same income, same 138% line,
+ * different Program — the ticket's headline claim made concrete rather than
+ * only asserted in a code comment.
+ */
+export const deniseAlone: HouseholdProfile = {
+  members: [
+    {
+      id: "denise",
+      age: 40,
+      relationship: "self",
+      sharesFoodPurchaseAndPreparation: true,
+      incomeSources: [{ type: "wages", amount: 150_000, period: "monthly" }],
+    },
+  ],
+  town: "Stamford",
+};
+
+/**
+ * Denise, with her eight-year-old. Identical income to `deniseAlone` and the
+ * identical 138% FPL test — but a household of two now, and a dependent child
+ * in the home routes her to HUSKY A's parent/caretaker line instead of HUSKY
+ * D's, per `docs/ct-program-facts.md` §2: "The distinguishing fact is
+ * household composition (dependent child in the home), not income." Her son
+ * clears HUSKY A's own 201% children's line by an even wider margin, so both
+ * of them land in the unit.
+ */
+export const deniseWithHerSon: HouseholdProfile = {
+  members: [
+    {
+      id: "denise",
+      age: 40,
+      relationship: "self",
+      sharesFoodPurchaseAndPreparation: true,
+      incomeSources: [{ type: "wages", amount: 150_000, period: "monthly" }],
+    },
+    {
+      id: "son",
+      age: 8,
+      relationship: "child",
+      sharesFoodPurchaseAndPreparation: true,
+      incomeSources: [],
+    },
+  ],
+  town: "Stamford",
+};
