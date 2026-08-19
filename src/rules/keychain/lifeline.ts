@@ -1,7 +1,8 @@
 import { fplAnnual } from "../fpl";
-import { monthlyTotal, needsWorkHours } from "../income";
-import type { KeychainRule } from "../keychain-rule";
-import type { FactId, HouseholdProfile, Money, ProgramId, ProgramResult } from "../types";
+import { incomeBlockedBy, monthlyTotal } from "../income";
+import { receivesAnyOf, type KeychainRule } from "../keychain-rule";
+import { SNAP } from "../programs/snap";
+import type { Money, ProgramId, ProgramResult } from "../types";
 
 export const LIFELINE: ProgramId = "lifeline";
 
@@ -9,10 +10,11 @@ export const LIFELINE: ProgramId = "lifeline";
  * Programs whose participation makes a household categorically eligible for
  * Lifeline, without an income test — the exact list, sourced to
  * `docs/ct-program-facts.md` §7: "participation in Medicaid, SNAP, SSI,
- * Federal Public Housing Assistance, or Veterans Pension".
+ * Federal Public Housing Assistance, or Veterans Pension". Unlike LIDR
+ * (`keychain/lidr.ts`), Lifeline's own sourced list names only SSI, not SSDI.
  */
 const CATEGORICALLY_ELIGIBLE_PROGRAMS: ProgramId[] = [
-  "snap",
+  SNAP,
   "medicaid",
   "ssi",
   "federal-public-housing-assistance",
@@ -39,16 +41,14 @@ export const screenLifeline: KeychainRule = (profile) => {
   const { members } = profile;
   const unit = members.map((member) => member.id);
 
-  if (isCategoricallyEligible(profile)) {
+  if (receivesAnyOf(profile, CATEGORICALLY_ELIGIBLE_PROGRAMS)) {
     return { programId: LIFELINE, blockedBy: [], result: eligibleResult(unit) };
   }
 
-  const sources = members.flatMap((member) => member.incomeSources ?? []);
-  const blockedBy: FactId[] = [];
-  if (members.some((member) => member.incomeSources === undefined)) blockedBy.push("income-sources");
-  if (needsWorkHours(sources)) blockedBy.push("work-hours");
+  const blockedBy = incomeBlockedBy(members);
   if (blockedBy.length > 0) return { programId: LIFELINE, blockedBy };
 
+  const sources = members.flatMap((member) => member.incomeSources ?? []);
   const annualIncome = (monthlyTotal(sources) ?? 0) * 12;
   if (annualIncome > Math.round(fplAnnual(members.length) * 1.35)) {
     return {
@@ -75,10 +75,4 @@ function eligibleResult(unit: string[]): ProgramResult {
     figures: { monthly: MONTHLY_SUPPORT, annual: MONTHLY_SUPPORT * 12, basis: BASIS },
     blockedBy: [],
   };
-}
-
-function isCategoricallyEligible(profile: HouseholdProfile): boolean {
-  return (
-    profile.programsAlreadyReceived?.some((program) => CATEGORICALLY_ELIGIBLE_PROGRAMS.includes(program)) ?? false
-  );
 }

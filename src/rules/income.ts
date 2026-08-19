@@ -1,4 +1,4 @@
-import type { IncomeSource, Money } from "./types";
+import type { FactId, IncomeSource, Member, Money } from "./types";
 
 /**
  * Income derivation: turning a list of sources into the monthly figure a
@@ -52,4 +52,19 @@ export function monthlyTotal(sources: IncomeSource[]): Money | undefined {
 /** Whether an hourly source is still waiting on the hours that make it money. */
 export function needsWorkHours(sources: IncomeSource[]): boolean {
   return sources.some((source) => source.period === "hourly" && source.hoursPerWeek === undefined);
+}
+
+/**
+ * Which facts are still missing before a whole-household income test can run
+ * at all: a member whose `incomeSources` has never been asked for, or an
+ * hourly rate with no hours against it yet. Shared by every rule whose unit
+ * is simply "everyone in the household" (Lifeline, LIDR) — CEAP's own version
+ * differs by also needing rent and vulnerability once income clears, so it is
+ * not merged in here.
+ */
+export function incomeBlockedBy(members: Member[]): FactId[] {
+  const blockedBy: FactId[] = [];
+  if (members.some((member) => member.incomeSources === undefined)) blockedBy.push("income-sources");
+  if (needsWorkHours(members.flatMap((member) => member.incomeSources ?? []))) blockedBy.push("work-hours");
+  return blockedBy;
 }

@@ -1,5 +1,5 @@
 import type { ProgramScreening } from "./program-rule";
-import type { HouseholdProfile, IsoDate, ProgramResult } from "./types";
+import type { HouseholdProfile, IsoDate, ProgramId, ProgramResult } from "./types";
 
 /**
  * A Keychain rule's shape differs from a `ProgramRule`'s by exactly one
@@ -20,3 +20,12 @@ export type KeychainRule = (
   programs: ProgramResult[],
   asOf: IsoDate,
 ) => ProgramScreening;
+
+/**
+ * Whether the household has reported already receiving any Program on
+ * `list` — the plain "participation, no income test" route both Lifeline and
+ * LIDR offer, each off its own list (`docs/ct-program-facts.md` §7).
+ */
+export function receivesAnyOf(profile: HouseholdProfile, list: ProgramId[]): boolean {
+  return profile.programsAlreadyReceived?.some((program) => list.includes(program)) ?? false;
+}

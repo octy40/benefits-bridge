@@ -1,4 +1,4 @@
-import type { KeychainRule } from "../keychain-rule";
+import { receivesAnyOf, type KeychainRule } from "../keychain-rule";
 import { SNAP } from "../programs/snap";
 import type { ProgramId } from "../types";
 
@@ -19,8 +19,7 @@ export const MUSEUMS_FOR_ALL: ProgramId = "museums-for-all";
  * same stance), so there is nothing to name in `blockedBy`.
  */
 export const screenMuseumsForAll: KeychainRule = (profile) => {
-  const receivesSnap = profile.programsAlreadyReceived?.includes(SNAP) ?? false;
-  if (!receivesSnap) return { programId: MUSEUMS_FOR_ALL, blockedBy: [] };
+  if (!receivesAnyOf(profile, [SNAP])) return { programId: MUSEUMS_FOR_ALL, blockedBy: [] };
 
   return {
     programId: MUSEUMS_FOR_ALL,

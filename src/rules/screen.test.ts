@@ -1100,7 +1100,7 @@ describe("Keychain: Lifeline, LIDR, and Museums for All", () => {
 
   describe("the utility Low-Income Discount Rate (LIDR)", () => {
     it("scores likely-eligible from program participation alone, income never asked", () => {
-      for (const program of ["snap", "husky", "ssi", "medicaid", "section-8"]) {
+      for (const program of ["snap", "husky", "ssi", "ssdi", "medicaid", "section-8"]) {
         const household: HouseholdProfile = {
           members: [{ id: "self" }],
           programsAlreadyReceived: [program],

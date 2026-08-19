@@ -1,22 +1,25 @@
 import { fplAnnual } from "../fpl";
-import { monthlyTotal, needsWorkHours } from "../income";
-import type { KeychainRule } from "../keychain-rule";
+import { incomeBlockedBy, monthlyTotal } from "../income";
+import { receivesAnyOf, type KeychainRule } from "../keychain-rule";
 import { CEAP } from "../programs/ceap";
-import type { FactId, HouseholdProfile, Money, ProgramId, ProgramResult } from "../types";
+import { SNAP } from "../programs/snap";
+import type { Money, ProgramId, ProgramResult } from "../types";
 
 export const LIDR: ProgramId = "lidr";
 
 /**
  * Programs whose participation auto-enrols a household in LIDR, without an
  * income test — `docs/ct-program-facts.md` §7: "Alternative qualification:
- * receiving SNAP, HUSKY, SSI/SSDI, Medicaid, Section 8, or CEAP."
+ * receiving SNAP, HUSKY, SSI/SSDI, Medicaid, Section 8, or CEAP." Both halves
+ * of "SSI/SSDI" are included: unlike Lifeline (`keychain/lifeline.ts`), whose
+ * own sourced list names only SSI, Eversource's own list names both.
  *
  * `CEAP` also has its own, separate route below (`appliedForCeap`) — this
  * list is for a household that already receives it; that one is for a
  * household screened `likely-eligible` for it in this very conversation, per
  * the FFY2027 LIHEAP plan's own auto-enrollment language.
  */
-const CATEGORICALLY_ELIGIBLE_PROGRAMS: ProgramId[] = ["snap", "husky", "ssi", "medicaid", "section-8", CEAP];
+const CATEGORICALLY_ELIGIBLE_PROGRAMS: ProgramId[] = [SNAP, "husky", "ssi", "ssdi", "medicaid", "section-8", CEAP];
 
 /**
  * 60% State Median Income, FFY2027 season, annual — the same figures as
@@ -86,7 +89,7 @@ function qualifyingTier(annualIncome: Money, householdSize: number): LidrTier | 
 
 /**
  * LIDR reaches `likely-eligible` three ways: Program receipt
- * (`isCategoricallyEligible`), a CEAP outcome this very pass just produced
+ * (`receivesAnyOf`), a CEAP outcome this very pass just produced
  * (`appliedForCeap` — the auto-enrollment the FFY2027 LIHEAP plan describes),
  * or its own income-tier test. The income route is not a fallback for a
  * household that fails the other two — it is the route that catches a
@@ -111,16 +114,14 @@ export const screenLidr: KeychainRule = (profile, programs) => {
   const { members } = profile;
   const unit = members.map((member) => member.id);
 
-  if (isCategoricallyEligible(profile) || appliedForCeap(programs)) {
+  if (receivesAnyOf(profile, CATEGORICALLY_ELIGIBLE_PROGRAMS) || appliedForCeap(programs)) {
     return { programId: LIDR, blockedBy: [], result: coverageResult(unit) };
   }
 
-  const sources = members.flatMap((member) => member.incomeSources ?? []);
-  const blockedBy: FactId[] = [];
-  if (members.some((member) => member.incomeSources === undefined)) blockedBy.push("income-sources");
-  if (needsWorkHours(sources)) blockedBy.push("work-hours");
+  const blockedBy = incomeBlockedBy(members);
   if (blockedBy.length > 0) return { programId: LIDR, blockedBy };
 
+  const sources = members.flatMap((member) => member.incomeSources ?? []);
   const annualIncome = (monthlyTotal(sources) ?? 0) * 12;
   if (qualifyingTier(annualIncome, members.length) === undefined) {
     return {
@@ -135,12 +136,6 @@ export const screenLidr: KeychainRule = (profile, programs) => {
 
 function coverageResult(unit: string[]): ProgramResult {
   return { programId: LIDR, outcome: "likely-eligible", unit, noFigureReason: "coverage-not-cash", blockedBy: [] };
-}
-
-function isCategoricallyEligible(profile: HouseholdProfile): boolean {
-  return (
-    profile.programsAlreadyReceived?.some((program) => CATEGORICALLY_ELIGIBLE_PROGRAMS.includes(program)) ?? false
-  );
 }
 
 function appliedForCeap(programs: ProgramResult[]): boolean {
