@@ -113,9 +113,23 @@ export type Member = {
    * vulnerable-household distinction (`programs/ceap.ts`) alongside age — a
    * member 60+ or a child under 6 already settles it without this ever being
    * asked, so a household is only blocked on `disability` when age alone
-   * cannot decide.
+   * cannot decide. Reused by Care 4 Kids (`programs/care-4-kids.ts`) as the
+   * proxy for the agency's own "special needs" category, which this app does
+   * not model separately — a documented approximation, not a second fact.
    */
   hasDisability?: boolean;
+  /**
+   * Whether this person is pregnant. `undefined` is "nobody has asked or said";
+   * `false` is "asked, and no". Unlike `hasDisability`, this is never a
+   * Blocking fact — nobody is proactively asked, so it only ever *adds*
+   * coverage to HUSKY A's pregnancy route (`programs/husky.ts`) when a
+   * Resident volunteers it. Making it a genuine Blocking fact would mean
+   * asking every household of childbearing age a question that, for almost
+   * all of them, decides nothing — the same asymmetry that keeps immigration
+   * status off the Blocking facts list, though for a different reason (that
+   * one is sensitive; this one is rarely decisive).
+   */
+  isPregnant?: boolean;
 };
 
 /**
