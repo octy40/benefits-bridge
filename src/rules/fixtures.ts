@@ -74,12 +74,12 @@ export const ctBbceBoundaryHousehold: HouseholdProfile = {
  * plus $976 of allowance puts her far enough above half her adjusted income
  * that the excess shelter deduction is pinned at its $744 cap.
  *
- * The name is a promise about a second fixture. When her mother moves in, the
- * unit grows to four, a Social Security stream arrives, and — because the
- * household then contains an elderly member — the $744 cap comes off entirely.
- * That is the household change the demo turns on, and it is issue #17's scope
- * (gated on #10), not this fixture's: nothing here records disability or acts
- * on age.
+ * The name is a promise about a second fixture, and `mariaAfterHerMother` below
+ * keeps it. When her mother moves in the unit grows to four, a Social Security
+ * stream arrives, and — because the household then contains an elderly member —
+ * the $744 cap comes off entirely. This household is the *before* half of that
+ * pair and nothing in it records disability or is old enough to act on age, so
+ * its own SNAP figure is computed with the cap on.
  */
 export const mariaBeforeHerMother: HouseholdProfile = {
   members: [
@@ -114,6 +114,88 @@ export const mariaBeforeHerMother: HouseholdProfile = {
 };
 
 /**
+ * "Maria after her mother" — the household the demo turns on, and the one
+ * fixture in this file that asserts two consequences of a single fact.
+ *
+ * `mariaBeforeHerMother` with one member added: her mother, 71, on $950 a month
+ * of Social Security, who buys and prepares food with them. Nothing else about
+ * the household changes — same rent, same heating bill, same wages, same cash.
+ *
+ * Two things move, and only one of them is the one anybody would script
+ * (ADR-0007):
+ *
+ *  - **the renters' rebate appears**, because the mother is 65 or over and
+ *    rents. It derives its own Program unit — her, not the household — and its
+ *    own definition of income, which counts her Social Security in full where
+ *    SNAP counts it as unearned and the EITC would ignore it (ADR-0003,
+ *    ADR-0009). Two adults share the apartment, so she is credited with half
+ *    the rent: 35% of $9,600 less 5% of $11,400 is $2,790, over the $700
+ *    maximum, so she gets $700;
+ *  - **SNAP's existing figure moves**, from $573 a month to $693, because a
+ *    member aged 60 or over removes the excess shelter deduction cap entirely
+ *    (7 CFR 273.9(d)(6)(ii); verified for Connecticut in issue #10). Her
+ *    arrival also grows the unit to four and adds her income to it, so the
+ *    figure is not simply the old one plus the cap — all three changes land at
+ *    once, which is what a script could not have produced.
+ *
+ * Nothing in the rules module knows this household by name. Both consequences
+ * fall out of a member with an age and an income source being added to a list,
+ * which is the claim ADR-0007 makes and the reason there is no trigger here to
+ * find.
+ */
+export const mariaAfterHerMother: HouseholdProfile = {
+  ...mariaBeforeHerMother,
+  members: [
+    ...mariaBeforeHerMother.members,
+    {
+      id: "mother",
+      age: 71,
+      relationship: "mother",
+      sharesFoodPurchaseAndPreparation: true,
+      incomeSources: [{ type: "social-security", amount: 95_000, period: "monthly" }],
+    },
+  ],
+};
+
+/**
+ * The renters' rebate case that produces nothing, and has to say so.
+ *
+ * A 74-year-old renting a room in Stamford for $500 a month on $43,200 a year —
+ * $2,100 of Social Security and $1,500 of pension income, monthly. She is
+ * comfortably under the rebate's $46,300 qualifying income limit, so an income
+ * test alone would put her on the map. The computation does not: 35% of her
+ * $6,000 of annual rent is $2,100 and 5% of her qualifying income is $2,160, so
+ * the grant is negative and Connecticut sends no check at all (OPM Q&A booklet
+ * Q57, form M-35r line 15).
+ *
+ * Her Social Security is what decides it. On the pension alone her qualifying
+ * income would be $18,000, 5% of that is $900, and she would have a rebate — so
+ * this one fixture carries both the "counts Social Security in full" rule and
+ * the "nothing, not a spurious figure" rule, and neither can be broken without
+ * the other's assertion noticing.
+ *
+ * SNAP has nothing for her either, on income: $3,600 a month is over
+ * Connecticut's $2,609 limit for a unit of one.
+ */
+export const rebateComputesToNothingHousehold: HouseholdProfile = {
+  members: [
+    {
+      id: "self",
+      age: 74,
+      relationship: "self",
+      sharesFoodPurchaseAndPreparation: true,
+      incomeSources: [
+        { type: "social-security", amount: 210_000, period: "monthly" },
+        { type: "other", amount: 150_000, period: "monthly" },
+      ],
+    },
+  ],
+  town: "Stamford",
+  monthlyRent: 50_000,
+  utilitiesPaid: [],
+};
+
+/**
  * Maria, having been asked about immigration status and declined.
  *
  * The same household as `mariaBeforeHerMother` in every other respect, which is
@@ -130,17 +212,18 @@ export const mariaBeforeHerMother: HouseholdProfile = {
  * are, in law, available to a mixed-status family with citizen children, and
  * the household-level question cannot see that.
  *
- * **What this fixture cannot yet demonstrate, named rather than faked.** The
- * ticket asks that status-blind Programs still be scored and the headline still
- * be produced from them. SNAP is the only implemented Program and it is
- * status-dependent, so there is no "the rest" and the correct headline here is
- * $0. The only genuinely status-blind Program on BenefitBridge's list is the CT
- * Elderly/Disabled Renters' Rebate (`docs/ct-program-facts.md` §6, §8), which
- * belongs to issue #17 and is blocked behind issue #10. When it lands, this
- * fixture should assert a non-zero headline built from it alongside an
- * Indeterminate SNAP. A stub Program added here to make that assertion pass
- * today would be worse than the gap — `fixtures.ts` exists so the demo and the
- * suite cannot drift, and a fake Program drifts them both from reality.
+ * **Where the status-blind half of the claim is actually demonstrated.** The
+ * ticket behind this fixture asked that status-blind Programs still be scored
+ * and a headline still be produced from them. Every Program this *household*
+ * reaches is status-dependent, so its Programs are all Indeterminate and the
+ * only thing holding its headline up is the Keychain. The genuinely
+ * status-blind Program on BenefitBridge's list is the CT Elderly/Disabled
+ * Renters' Rebate (`docs/ct-program-facts.md` §6, §8), and it needs a member 65
+ * or over, which this household does not have. `mariaAfterHerMother` does:
+ * declining on that household leaves every Program Indeterminate *except* the
+ * rebate, which keeps its $700 and its place in the headline. That pair is
+ * where `screen.test.ts` asserts the claim, and this fixture stays the plain
+ * measure of what declining costs a household the rebate cannot reach.
  */
 export const declinedStatusHousehold: HouseholdProfile = {
   ...mariaBeforeHerMother,

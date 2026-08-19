@@ -20,21 +20,43 @@ import { eligibilityMapView, type MapGroup, type ReasonEntry } from "./eligibili
  * headline; entries with no figure sit beneath it, each carrying its own reason.
  * Indeterminate entries are neither, and are grouped apart from both — a
  * Program BenefitBridge cannot place is not a smaller version of one it can.
+ *
+ * `previous` is the map this one replaced, and it is the whole of how the
+ * demo's central beat is rendered. When a Resident mentions that her mother
+ * moved in, a Program appears and another Program's figure changes at the same
+ * moment (ADR-0007) — and a panel that simply swapped its contents would show
+ * both happening and neither being noticed. The lines that moved carry a badge
+ * and animate in; the seven that did not sit still, so there is something to
+ * look at rather than everything to look at. `eligibility-map-view.ts` decides
+ * *what* moved, from two `ScreeningResult`s and nothing else; this file only
+ * decides how long it takes to say so.
  */
 export function EligibilityMapPanel({
   screening,
+  previous,
   language,
 }: {
   screening: ScreeningResult;
+  previous?: ScreeningResult;
   language: Language;
 }) {
-  const map = eligibilityMapView(screening, language);
+  const map = eligibilityMapView(screening, language, previous);
 
   return (
     <aside className="map" aria-label={map.label}>
       <div className="map-headline">
         <p className="map-headline-label">{map.headline.label}</p>
         <p className="map-headline-total">{map.headline.total}</p>
+        {/*
+          Announced politely rather than assertively: the Resident is reading
+          the transcript when this lands, and a live region that interrupts is
+          worse than one they reach a moment later.
+        */}
+        {map.headline.change ? (
+          <p className="map-headline-change" aria-live="polite">
+            {map.headline.change}
+          </p>
+        ) : null}
         <p className="map-headline-note">{map.headline.note}</p>
       </div>
 
@@ -62,12 +84,21 @@ function EntryGroup({ group }: { group: MapGroup }) {
       {group.withFigures.length > 0 ? (
         <ol className="map-tier">
           {group.withFigures.map((entry) => (
-            <li key={entry.programId} className="map-entry">
+            /*
+              The change class is what animates. It is present from the moment
+              this map replaces the last one until the next map arrives, so the
+              reveal plays once — a CSS animation runs when its class appears,
+              not on every re-render — and the badge then stays as a marker of
+              which line moved, rather than pulsing at a Resident trying to read
+              it.
+            */
+            <li key={entry.programId} className={entryClass(entry.change)}>
               <span className="map-entry-name">
                 {entry.name}
                 {entry.provisional ? (
                   <span className="map-entry-provisional">{entry.provisional}</span>
                 ) : null}
+                {entry.change ? <span className="map-entry-change">{entry.change}</span> : null}
               </span>
               <span className="map-entry-figure">{entry.figure}</span>
               <span className="map-entry-basis">{entry.detail}</span>
@@ -106,9 +137,16 @@ function EntryGroup({ group }: { group: MapGroup }) {
 
 function ReasonLine({ entry }: { entry: ReasonEntry }) {
   return (
-    <li className="map-entry">
-      <span className="map-entry-name">{entry.name}</span>
+    <li className={entryClass(entry.change)}>
+      <span className="map-entry-name">
+        {entry.name}
+        {entry.change ? <span className="map-entry-change">{entry.change}</span> : null}
+      </span>
       <span className="map-entry-reason">{entry.reason}</span>
     </li>
   );
+}
+
+function entryClass(change: string | undefined): string {
+  return change ? "map-entry map-entry-moved" : "map-entry";
 }

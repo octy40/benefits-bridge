@@ -20,7 +20,21 @@ export function ConversationView() {
   const nextBubbleId = useRef(0);
 
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
-  const [screening, setScreening] = useState<ScreeningResult>(conversation.current.screening);
+  /**
+   * The map on screen, and the one it replaced.
+   *
+   * Both are held because the panel renders the *difference* between them: a
+   * Program appearing and another Program's figure moving are the demo's
+   * central beat, and a panel handed only the latest map can show that
+   * happening but cannot show that it happened (ADR-0007). The previous map is
+   * the last one a Resident actually saw: only a turn that records new facts
+   * replaces it, so a language flip — which re-renders the same map from the
+   * translation table and asks the rules module nothing — leaves the pair
+   * alone and the badges where they were (ADR-0013).
+   */
+  const [maps, setMaps] = useState<{ current: ScreeningResult; previous?: ScreeningResult }>({
+    current: conversation.current.screening,
+  });
   const [language, setLanguage] = useState<Language>(conversation.current.language);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -58,13 +72,24 @@ export function ConversationView() {
           setBubbles((current) => [...current, bubble]);
         },
         onAssistantText: appendToLastBubble,
-        onScreening: setScreening,
+        onScreening: showScreening,
       });
     } catch (error) {
       setFailure(describeFailure(error));
     } finally {
       setBusy(false);
     }
+  }
+
+  /**
+   * A new eligibility map arrives and the one it replaces becomes the thing it
+   * is read against. Written as a functional update because the map on screen
+   * is the only honest answer to "previous", and a turn that calls the facts
+   * tool twice must pair each map with the one just before it rather than with
+   * whatever was there when the turn started.
+   */
+  function showScreening(screening: ScreeningResult) {
+    setMaps((shown) => ({ current: screening, previous: shown.current }));
   }
 
   /**
@@ -106,7 +131,7 @@ export function ConversationView() {
           awaitingReplacement = false;
           setBubbles((current) => [...withoutTrailingNarration(current), bubble]);
         },
-        onScreening: setScreening,
+        onScreening: showScreening,
       });
     } catch (error) {
       // The interface has already flipped and is not flipping back; it was the
@@ -215,7 +240,7 @@ export function ConversationView() {
         </form>
       </section>
 
-      <EligibilityMapPanel screening={screening} language={language} />
+      <EligibilityMapPanel screening={maps.current} previous={maps.previous} language={language} />
     </main>
   );
 }

@@ -401,8 +401,8 @@ Administered by the **Office of Policy and Management (OPM)**; applications are 
 | Residency | One-year CT residency | OPM program page |
 | **Income limit — unmarried** | **$46,300** (calendar year 2025 qualifying income) | OPM Q&A booklet, Q1(3) and Q49 |
 | **Income limit — married** | **$56,500** (combined, calendar year 2025) | OPM Q&A booklet, Q1(3) and Q49 |
-| Max rebate — single | **$700** | OPM program page |
-| Max rebate — married | **$900** | OPM program page |
+| Max rebate — single | **$700** — the **first band** of a graduated table, not a flat maximum; see below | OPM program page + CGS §12-170e |
+| Max rebate — married | **$900** — likewise the first band | OPM program page + CGS §12-170e |
 | Minimum payable check | rebate must compute to **$10.00 or more** to be issued | OPM Q&A booklet, Q33 |
 | Application window | **April 1 – September 30, 2026**, no extensions | OPM program page + Q&A booklet |
 | Payment by | on or before November 30; contact OPM by December 15 if unpaid | OPM program page |
@@ -423,6 +423,51 @@ Consequence worth encoding: if 35% of rent+utilities is *less than* 5% of qualif
 "Qualifying income" = **all taxable and nontaxable income**, including net Social Security from Box 5 of the SSA-1099. Federal tax return copy is required if one was filed. Part-year renters have income apportioned by months rented.
 
 Source: OPM Q&A booklet Q26, Q34, Q56–Q59.
+
+### The grant computation, line by line (form M-35r)
+
+OPM's own application form settles the order of operations, which the prose above leaves ambiguous:
+
+| Line | What it is |
+| --- | --- |
+| 13 | 35% of the applicant's **share** of rent + electricity + gas + water + fuel |
+| 14 | 5% of qualifying income |
+| 15 | Line 13 − Line 14. **"If zero or negative amount, there is no benefit. Enter –0– on Line 20."** |
+| 17 | Maximum credit allowed — "amount per table", prorated by months rented for a part year |
+| 18 | The **lesser** of Line 15 and Line 17 |
+| 19 | Minimum per table |
+| 20 | The **greater** of Line 18 and Line 19 — the tentative grant |
+
+Source: https://portal.ct.gov/opm/-/media/opm/igpp-data-grants-mgmt/igpp-forms/m-35r-renters-application.pdf
+
+Note that Line 19/20 makes the table's minimum a floor applied **upward**: a qualifying applicant whose computed amount is small still receives their band's minimum, and the route to nothing on the form itself is Line 15 being zero or negative.
+
+The **$10.00** rule sits in the booklet's Basic Information (4), whose first sentence is about a DSS cash-assistance offset and whose second is general: *"The cash assistance received, if less than the Renter's Rebate, will be deducted from the check, provided it leaves $10.00 or more. **If the check is not $10.00 or more it will not be sent.**"* The second sentence reads as a rule about cheques rather than about the offset, and that is how the implementation takes it — a computed grant under $10 produces no entry. Two things make the reading safe rather than merely convenient: the band minimums are $50 and up, so on the real table a qualifying applicant's grant can only fall under $10 by the same Line 15 route that already pays nothing; and with those band minimums unimplemented (see below), the $10 floor is the only thing standing where the upward floor should be. Worth re-reading against OPM if the banded table is ever obtained.
+
+### The graduated maximum-grant table — **partially UNVERIFIED for 2026**
+
+**Research date: 2026-08-19.** §6 above previously recorded "$700 single / $900 married" as though it were a single maximum. It is not: CGS **§12-170e** sets a *graduated* table, and the $700/$900 figures OPM's program page quotes are only its **first band**. OPM's page says so — "the renters' rebate amount is based on a graduated income scale" — and directs readers to §12-170e for the thresholds.
+
+The statutory (base-year) table:
+
+| Qualifying income | Married max | Married min | | Qualifying income | Unmarried max | Unmarried min |
+| --- | --- | --- | --- | --- | --- | --- |
+| $0–$8,100 | $900 | $400 | | $0–$8,100 | $700 | $300 |
+| $8,100–$10,800 | $700 | $300 | | $8,100–$10,800 | $500 | $200 |
+| $10,800–$13,500 | $500 | $200 | | $10,800–$13,500 | $250 | $100 |
+| $13,500–$16,200 | $250 | $100 | | $13,500–$16,200 | $150 | $50 |
+| $16,200–$20,000 | $150 | $50 | | over $16,200 | none | none |
+| over $20,000 | none | none | | | | |
+
+Source: CGS §12-170e via FindLaw — https://codes.findlaw.com/ct/title-12-taxation/ct-gen-st-sect-12-170e/
+
+**What is missing, and why.** §12-170e adjusts the *band boundaries* (not the grant amounts) every year by the Social Security COLA, rounded to the nearest $100, cumulatively over the prior year's limits — which is how the base table's $16,200 unmarried ceiling has become 2026's **$46,300**. The Secretary of OPM computes the adjusted table and distributes it **to municipal assessors by 31 December**. It is not on OPM's program page, not in the 2026 Q&A booklet (searched), and not on form M-35r — all three say only "amount per table". Only the outermost boundary and the first band's maximum are published.
+
+The intermediate 2026 boundaries can be *estimated* by scaling the base bands (the unmarried ratio is $46,300/$16,200 ≈ 2.858), but decades of per-year rounding to $100 means a scaled figure is not the published one, and near a boundary the difference is $700 versus $500. **Estimated boundaries are deliberately not recorded here or in code.**
+
+**What the implementation does about it** (`src/rules/programs/renters-rebate.ts`): it applies the first band's $700 maximum across the whole income range. That **overstates** the grant for an applicant in an upper band — the wrong direction for a defensible figure, and the only figure in BenefitBridge's rules module that errs that way. It also does not implement the upward per-band minimum, which **understates** small grants. Both are documented at the table in that file. Getting OPM's 2026 table from OPM or from a Connecticut assessor's office turns this into a banded lookup and is a data change, not a code change.
+
+Also not modelled, and each narrows real eligibility: the **one-year Connecticut residency requirement** and the **50-or-over surviving spouse** route (the Household profile has fields for neither), and the **married** table entirely (`relationship` is free text, so every applicant is screened as unmarried — which understates both the maximum, $700 against $900, and the shared-rent proration, since §12-170d counts spouses as one tenant).
 
 ### Social Security COLA adjustment (2026)
 

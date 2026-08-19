@@ -210,6 +210,63 @@ body {
   font-size: 0.8rem;
 }
 
+/*
+  The change. A Resident's answer lands and one or two lines on this panel move
+  — a Program appearing, another Program's figure changing — while the rest hold
+  still (ADR-0007). The reveal is slow enough to be followed and short enough not
+  to be waited on: what is being avoided is a panel whose contents are simply
+  different the next time anybody looks at it.
+
+  Which lines carry these classes is decided in `eligibility-map-view.ts`, from
+  two `ScreeningResult`s and nothing else. Nothing here knows what a Program is.
+*/
+.map-headline-change {
+  margin: 0.1rem 0 0;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  animation: map-change-in 700ms ease-out both;
+}
+
+.map-entry-moved {
+  animation: map-change-in 700ms ease-out both;
+}
+
+.map-entry-change {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+@keyframes map-change-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.35rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+  A Resident who has asked their operating system not to animate things is
+  asking about this too. The badge still says which lines moved, so nothing is
+  lost but the movement.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .map-headline-change,
+  .map-entry-moved {
+    animation: none;
+  }
+}
+
 .map-empty {
   margin: 0;
   color: var(--muted);

@@ -2,15 +2,7 @@ import { inForceOn, type EffectiveDated } from "../effective-dated";
 import { monthlyTotal, needsWorkHours } from "../income";
 import { statusDependent } from "../immigration-status";
 import type { ProgramRule } from "../program-rule";
-import type {
-  FactId,
-  IncomeSource,
-  IncomeType,
-  Member,
-  Money,
-  ProgramId,
-  UtilityPaid,
-} from "../types";
+import type { FactId, IncomeType, Member, Money, ProgramId, UtilityPaid } from "../types";
 
 export const SNAP: ProgramId = "snap";
 
@@ -328,9 +320,13 @@ const scoreSnap: ProgramRule = (profile, asOf) => {
     };
   }
 
+  // The unit rather than its size, because the allotment now turns on *who* is
+  // in it as well as how many: the excess shelter cap comes off for a unit
+  // containing an elderly or disabled member, and that is a fact about the SNAP
+  // household specifically — a grandmother who buys and prepares her food apart
+  // is outside it (7 CFR 273.9(d)(6)(ii), "if the household does not contain").
   const monthly = monthlyAllotment(
-    sources,
-    unit.length,
+    unit,
     monthlyRent,
     utilitiesPaid,
     allotmentFigures,
@@ -381,13 +377,15 @@ const scoreSnap: ProgramRule = (profile, asOf) => {
  * this chain between the standard and shelter deductions.
  */
 function monthlyAllotment(
-  sources: IncomeSource[],
-  unitSize: number,
+  unit: Member[],
   monthlyRent: Money,
   utilitiesPaid: UtilityPaid[],
   figures: AllotmentFigures,
   allowances: UtilityAllowances,
 ): Money {
+  const sources = countedSources(unit);
+  const unitSize = unit.length;
+
   const grossEarnedIncome = monthlyTotal(sources.filter((source) => IS_EARNED_INCOME[source.type])) ?? 0;
   const grossIncome = monthlyTotal(sources) ?? 0;
 
@@ -408,7 +406,11 @@ function monthlyAllotment(
     shelterCosts - Math.round(adjustedIncome * figures.shelterCostShareOfAdjustedIncome),
   );
 
-  const netIncome = Math.max(0, adjustedIncome - applyShelterCap(excessShelter, figures.excessShelterCap));
+  const shelterDeduction = containsElderlyOrDisabledMember(unit)
+    ? excessShelter
+    : Math.min(excessShelter, figures.excessShelterCap);
+
+  const netIncome = Math.max(0, adjustedIncome - shelterDeduction);
 
   // 7 CFR 273.10(e)(2)(ii)(A) lets a state either round this product **up** to
   // the next whole dollar, or leave it unrounded and round the final allotment
@@ -442,23 +444,39 @@ function monthlyAllotment(
 }
 
 /**
- * The excess shelter deduction, capped.
+ * Whether the SNAP unit contains an elderly or disabled member, which is the
+ * fact that removes the excess shelter cap entirely rather than raising it.
  *
- * Verified and deliberately deferred: for a unit containing an elderly or
- * disabled member the cap is **removed entirely**, not raised. 7 CFR
- * 273.9(d)(6)(ii) applies the limit only "if the household does not contain an
- * elderly or disabled member", and 273.10(e)(1)(i)(I) gives such a household
- * the full amount of shelter costs above 50% of its income.
+ * 7 CFR 273.9(d)(6)(ii) applies the limit only "if the household does not
+ * contain an elderly or disabled member, as defined in §271.2", and
+ * 273.10(e)(1)(i)(I) gives such a household the full amount of its shelter
+ * costs above 50% of income. **Connecticut applies it as written**, and that
+ * was verified rather than inferred (issue #10): a 2023 CT DSS fair hearing
+ * decision applies the rule to a real appellant, and DSS's own caseworker
+ * computation sheet W-1216 prints "Shelter hardship cannot exceed $597 unless
+ * AU has member 60 or older, or disabled" — CT DSS's own words, in CT DSS's own
+ * case math (`docs/ct-program-facts.md` §1).
  *
- * That is issue #17's scope, gated on issue #10, and implementing it here would
- * mean adding a disability field to `Member` and branching on age — neither of
- * which any Program currently asks for. This function exists as a seam so that
- * work is a parameter and a line, not a rewrite of the chain above: it is also
- * the reason the demo's second act works, since a grandmother moving in is
- * exactly the household that loses this cap.
+ * **Elderly here is 60, not 65.** §271.2 sets 60 for SNAP; the renters' rebate
+ * next door sets 65 (`programs/renters-rebate.ts`). They are different lines
+ * drawn by different agencies for different purposes and are deliberately not
+ * shared, which is also why a household can cross one without crossing the
+ * other.
+ *
+ * `hasDisability` being unknown reads as *not disabled*, and that understates:
+ * a household with an unrecorded disabled member keeps a cap it should not
+ * have, so its allotment comes out lower than it will be. The precise
+ * alternative — reporting the figure blocked on `disability` whenever the cap
+ * actually binds and nobody has said — was considered and deferred: it would
+ * put that question to nearly every household under 60 with high shelter costs,
+ * where today it is asked only when CEAP needs it and this Program picks up the
+ * answer for free. Age settles it outright for the case that matters, which is
+ * the one the demo turns on.
  */
-function applyShelterCap(excessShelter: Money, cap: Money): Money {
-  return Math.min(excessShelter, cap);
+function containsElderlyOrDisabledMember(unit: Member[]): boolean {
+  return unit.some(
+    (member) => (member.age !== undefined && member.age >= 60) || member.hasDisability === true,
+  );
 }
 
 /**

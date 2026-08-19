@@ -42,6 +42,10 @@ const PROGRAM_NAMES: Record<ProgramId, Translated> = {
   "husky-a": { en: "HUSKY A", es: "HUSKY A" },
   "husky-d": { en: "HUSKY D", es: "HUSKY D" },
   "care-4-kids": { en: "Care 4 Kids", es: "Care 4 Kids" },
+  "renters-rebate": {
+    en: "Renters’ Rebate for older & disabled renters",
+    es: "Renters’ Rebate (reembolso para inquilinos mayores o con discapacidad)",
+  },
   lifeline: {
     en: "Lifeline phone & internet discount",
     es: "Lifeline (descuento de teléfono e internet)",
@@ -112,6 +116,12 @@ export type Copy = {
     keychainHeading: string;
     indeterminateHeading: string;
     provisionalBadge: string;
+    /** Badge on an entry that was not on the previous eligibility map. */
+    addedBadge: string;
+    /** Badge on an entry whose figure moved between the previous map and this one. */
+    changedBadge: string;
+    /** The headline's movement, e.g. "+$2,140 since your last answer". */
+    headlineChange: (delta: string) => string;
     caveat: string;
     perYear: (amount: string) => string;
     perMonth: (amount: string) => string;
@@ -148,6 +158,9 @@ const COPY: Record<Language, Copy> = {
       keychainHeading: "Discounts your eligibility unlocks",
       indeterminateHeading: "We can’t put these either way — and that’s your call",
       provisionalBadge: "Proposed",
+      addedBadge: "New",
+      changedBadge: "Updated",
+      headlineChange: (delta) => `${delta} since your last answer`,
       caveat:
         "BenefitBridge screens — it never decides. Only the agency running a Program can do that.",
       perYear: (amount) => `${amount} a year`,
@@ -186,6 +199,9 @@ const COPY: Record<Language, Copy> = {
       keychainHeading: "Descuentos a los que su elegibilidad le da acceso",
       indeterminateHeading: "De estos no podemos decir ni que sí ni que no — y esa decisión es suya",
       provisionalBadge: "Propuesta",
+      addedBadge: "Nuevo",
+      changedBadge: "Actualizado",
+      headlineChange: (delta) => `${delta} desde su última respuesta`,
       // "Evaluación preliminar", never "decisión": BenefitBridge screens, and
       // the Spanish has to hold that line as firmly as the English does
       // (CONTEXT.md, *Screening*).
