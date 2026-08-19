@@ -1,8 +1,9 @@
 import { inForceOn, type EffectiveDated } from "../effective-dated";
-import { monthlyTotal, needsWorkHours } from "../income";
+import { countedSources, householdIncomeBlockers } from "../household-income";
+import { monthlyTotal } from "../income";
 import { statusDependent } from "../immigration-status";
 import type { ProgramRule } from "../program-rule";
-import type { FactId, Member, Money, ProgramId } from "../types";
+import type { Member, Money, ProgramId } from "../types";
 
 export const CARE_4_KIDS: ProgramId = "care-4-kids";
 
@@ -172,17 +173,6 @@ function hasWorkingAdult(members: Member[]): boolean {
       (source) => source.type === "wages" || source.type === "cash-self-employment",
     ),
   );
-}
-
-function countedSources(members: Member[]) {
-  return members.flatMap((member) => member.incomeSources ?? []);
-}
-
-function householdIncomeBlockers(members: Member[]): FactId[] {
-  const blockedBy: FactId[] = [];
-  if (members.some((member) => member.incomeSources === undefined)) blockedBy.push("income-sources");
-  if (needsWorkHours(countedSources(members))) blockedBy.push("work-hours");
-  return blockedBy;
 }
 
 function limitFor(byHouseholdSize: Money[], householdSize: number): Money {

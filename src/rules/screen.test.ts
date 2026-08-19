@@ -1130,6 +1130,24 @@ describe("HUSKY A and HUSKY D: coverage, never cash", () => {
     expect(programIds).not.toContain("husky-a");
     expect(programIds).not.toContain("husky-d");
   });
+
+  it("extends the 138% limit table past the eight sizes CT DSS tabulates, at its own increment", () => {
+    // Nine members: self plus eight dependent children. The tabulated size-8
+    // parent line is $6,408/month; the size-9 line extends it by the table's
+    // own $653 increment (`programs/husky.ts`) to $7,061. $7,000/month clears
+    // the extended line but not the tabulated one — the assertion that would
+    // have caught this module reusing the 100%-FPL "+$473" figure instead.
+    const nine: HouseholdProfile = {
+      members: [
+        member("self", { age: 35, incomeSources: [{ type: "wages", amount: 700_000, period: "monthly" }] }),
+        ...Array.from({ length: 8 }, (_, index) => member(`child-${index}`, { age: 5, incomeSources: [] })),
+      ],
+    };
+
+    const huskyA = screen(nine, ASOF, 0).programs.find((program) => program.programId === "husky-a")!;
+    expect(huskyA.outcome).toBe("likely-eligible");
+    expect(huskyA.unit).toContain("self");
+  });
 });
 
 describe("Care 4 Kids: waitlisted, never a figure", () => {

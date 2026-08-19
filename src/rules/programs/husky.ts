@@ -1,20 +1,25 @@
 import { inForceOn, type EffectiveDated } from "../effective-dated";
-import { monthlyTotal, needsWorkHours } from "../income";
+import { countedSources, householdIncomeBlockers } from "../household-income";
+import { monthlyTotal } from "../income";
 import { statusDependent } from "../immigration-status";
 import type { ProgramRule } from "../program-rule";
-import type { FactId, Member, MemberId, Money, ProgramId } from "../types";
+import type { Member, MemberId, Money, ProgramId } from "../types";
 
 export const HUSKY_A: ProgramId = "husky-a";
 export const HUSKY_D: ProgramId = "husky-d";
 
 /**
- * The each-additional-member monthly increment from the 2026 HHS poverty
- * guidelines (`docs/ct-program-facts.md` §0: "+$5,680" annual, "+$473" monthly
- * as the agency's own table already rounds it). Used only to extend the three
- * tables below past the eight household sizes CT DSS tabulates — the same
- * role SNAP's and CEAP's own extension constants play, and the same source.
+ * ADR-0003 names HUSKY's Program unit by example: "HUSKY uses the tax
+ * household." This module does not implement that — there is no tax-filer or
+ * dependent-relationship concept anywhere in the Household profile (`Member`
+ * carries only free-text `relationship`), and building one was judged out of
+ * scope for this ticket. Every income test below runs against the whole
+ * household instead, the same approximation `programs/ceap.ts` makes for its
+ * own unit — but CEAP's unit and a tax household coincide far more often than
+ * they diverge, while HUSKY's really can differ (an adult sibling who shares
+ * a home but not a tax return, for one). Named here as a real, not-yet-closed
+ * gap against ADR-0003's own example, rather than a silent substitution.
  */
-const FPL_EACH_ADDITIONAL_MEMBER_MONTHLY: Money = 47_300;
 
 type HuskyIncomeLimits = {
   /** How the table is named wherever a figure derived from it is quoted. */
@@ -27,10 +32,24 @@ type HuskyIncomeLimits = {
    * household of one.
    */
   adult138ByHouseholdSize: Money[];
+  /**
+   * The monthly increment for each household size past the eight CT DSS
+   * tabulates, taken from the table's own last two entries (the size-8 minus
+   * size-7 delta: $640.80 − $575.50 = $65.30) rather than scaled from the
+   * 100%-FPL "+$473" figure in `docs/ct-program-facts.md` §0 — that figure is
+   * the 100% increment, and this table is 138% of FPL, so scaling it would
+   * need multiplying by 1.38, not reusing it as-is (a mistake this table's
+   * own siblings below repeat the same fix for).
+   */
+  adult138EachAdditionalMember: Money;
   /** HUSKY A, children under 19: 201% FPL, monthly. */
   children201ByHouseholdSize: Money[];
+  /** Same derivation as `adult138EachAdditionalMember`, from this table's own size-8/size-7 delta. */
+  children201EachAdditionalMember: Money;
   /** HUSKY A/B, pregnancy: 263% FPL, monthly. */
   pregnancy263ByHouseholdSize: Money[];
+  /** Same derivation as `adult138EachAdditionalMember`, from this table's own size-8/size-7 delta. */
+  pregnancy263EachAdditionalMember: Money;
 };
 
 /**
@@ -57,8 +76,11 @@ const HUSKY_INCOME_LIMITS: EffectiveDated<HuskyIncomeLimits>[] = [
     value: {
       basis: "CT DSS Program Standards Chart, eff. 3/1/2026 (2026 HHS poverty guidelines)",
       adult138ByHouseholdSize: [183_600, 248_900, 314_200, 379_500, 444_900, 510_200, 575_500, 640_800],
+      adult138EachAdditionalMember: 65_300,
       children201ByHouseholdSize: [267_400, 362_500, 457_700, 552_800, 647_900, 743_100, 838_200, 933_400],
+      children201EachAdditionalMember: 95_200,
       pregnancy263ByHouseholdSize: [349_800, 474_300, 598_800, 723_300, 847_800, 972_300, 1_096_800, 1_221_200],
+      pregnancy263EachAdditionalMember: 124_400,
     },
   },
 ];
@@ -97,6 +119,13 @@ export const screenHuskyD: ProgramRule = (profile, asOf) =>
  * same order CEAP's `vulnerabilityOf` uses: a household with nobody's age
  * known yet, and nobody recorded pregnant, has no route this function could
  * even test, so it never asks for income on HUSKY A's account at all.
+ *
+ * The parent/caretaker route covers every adult in the household once a
+ * dependent child is present and income clears the line — not specifically
+ * *that child's* parent or caretaker relative. Same gap `hasWorkingAdult` in
+ * `programs/care-4-kids.ts` names for its own working-parent test, and for
+ * the same reason: `Member` has no parent/guardian role beyond free-text
+ * `relationship`, so there is nothing here to route on more precisely.
  */
 const scoreHuskyA: ProgramRule = (profile, asOf) => {
   const table = inForceOn(HUSKY_INCOME_LIMITS, asOf);
@@ -133,14 +162,20 @@ const scoreHuskyA: ProgramRule = (profile, asOf) => {
   const covered = new Set<MemberId>();
   if (
     dependentChildPresent &&
-    monthlyIncome <= limitFor(table.adult138ByHouseholdSize, householdSize)
+    monthlyIncome <= limitFor(table.adult138ByHouseholdSize, table.adult138EachAdditionalMember, householdSize)
   ) {
     for (const member of members.filter(isAdult)) covered.add(member.id);
   }
-  if (monthlyIncome <= limitFor(table.children201ByHouseholdSize, householdSize)) {
+  if (
+    monthlyIncome <=
+    limitFor(table.children201ByHouseholdSize, table.children201EachAdditionalMember, householdSize)
+  ) {
     for (const member of members.filter(isDependentChild)) covered.add(member.id);
   }
-  if (monthlyIncome <= limitFor(table.pregnancy263ByHouseholdSize, householdSize)) {
+  if (
+    monthlyIncome <=
+    limitFor(table.pregnancy263ByHouseholdSize, table.pregnancy263EachAdditionalMember, householdSize)
+  ) {
     for (const member of members.filter((m) => m.isPregnant === true)) covered.add(member.id);
   }
 
@@ -202,7 +237,9 @@ const scoreHuskyD: ProgramRule = (profile, asOf) => {
   const householdSize = members.length;
   const monthlyIncome = monthlyTotal(countedSources(members)) ?? 0;
 
-  if (monthlyIncome > limitFor(table.adult138ByHouseholdSize, householdSize)) {
+  if (
+    monthlyIncome > limitFor(table.adult138ByHouseholdSize, table.adult138EachAdditionalMember, householdSize)
+  ) {
     return {
       programId: HUSKY_D,
       blockedBy: [],
@@ -240,22 +277,10 @@ function isAdult19to64(member: Member): boolean {
   return member.age !== undefined && member.age >= 19 && member.age <= 64;
 }
 
-/** Every source of every member — HUSKY tests the whole household, like CEAP. */
-function countedSources(members: Member[]) {
-  return members.flatMap((member) => member.incomeSources ?? []);
-}
-
-function householdIncomeBlockers(members: Member[]): FactId[] {
-  const blockedBy: FactId[] = [];
-  if (members.some((member) => member.incomeSources === undefined)) blockedBy.push("income-sources");
-  if (needsWorkHours(countedSources(members))) blockedBy.push("work-hours");
-  return blockedBy;
-}
-
-function limitFor(byHouseholdSize: Money[], householdSize: number): Money {
+function limitFor(byHouseholdSize: Money[], eachAdditionalMember: Money, householdSize: number): Money {
   const tabulated = byHouseholdSize[householdSize - 1];
   if (tabulated !== undefined) return tabulated;
 
   const largest = byHouseholdSize[byHouseholdSize.length - 1]!;
-  return largest + FPL_EACH_ADDITIONAL_MEMBER_MONTHLY * (householdSize - byHouseholdSize.length);
+  return largest + eachAdditionalMember * (householdSize - byHouseholdSize.length);
 }
