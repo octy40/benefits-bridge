@@ -87,12 +87,31 @@ Source: https://www.fns.usda.gov/snap/recipient/eligibility (Table 5)
 | Standard deduction, HH 4 | $223 | CT DSS chart |
 | Standard deduction, HH 5 | $261 | CT DSS chart |
 | Standard deduction, HH 6+ | $299 | CT DSS chart |
-| Excess shelter deduction cap (non-elderly/disabled) | $744 | FNS + CT DSS chart ("Max Shelter Hardship") |
+| Excess shelter deduction cap (non-elderly/disabled) | $744 | FNS + CT DSS chart ("Max Shelter Hardship") — elderly/disabled exemption **CONFIRMED**, see subsection below |
 | Homeless shelter deduction | $198.99 | FNS + CT DSS chart |
 | CT Standard Utility Allowance (SUA) | $976 | CT DSS chart |
 | CT Limited Utility Allowance (LUA) | $430 | CT DSS chart |
 | CT Telephone Allowance (TUA) | $36 | CT DSS chart |
 | Medical expense deduction (elderly/disabled) | expenses over $35/month | FNS eligibility page |
+
+### Elderly/disabled shelter cap exemption — verification (issue #10)
+
+**Research date: 2026-08-19. CONFIRMED — not merely inferred from the federal rule.**
+
+**The fact:** Connecticut applies the federal SNAP excess-shelter-deduction exemption exactly as written. A SNAP household containing a member who is age 60+ **or** meets the 7 CFR § 271.2 disability definition (SSI, or disability/blindness payments under Social Security Act titles I, II, X, XIV, or XVI) has **no dollar cap on its excess shelter deduction**. Shelter costs are deducted in full above 50% of the household's income after the standard deduction and earned-income deduction are applied. Households *without* a qualifying elderly/disabled member remain capped at the $744 FY2026 figure in the table above ("Max Shelter Hardship" on the CT DSS chart). The CT DSS chart's "Max Shelter Hardship $744" line is confirmed to be that non-elderly/disabled cap, not a universal cap — it is the same figure the federal regulation calls the "maximum shelter deduction limit."
+
+**Mechanism for `screen()`:** compute `shelter_costs − 0.5 × (income_after_earned_and_standard_deductions)`. If the result is negative, the shelter deduction is $0. If the household has a member 60+ or disabled (per 7 CFR § 271.2), use the full result with **no cap**. Otherwise, cap the result at $744 (CT FY2026 figure; re-verify each fiscal year against the CT DSS Program Standards Chart's "Max Shelter Hardship" line, since it moves with CPI like the SUA/LUA/TUA lines already implemented as `EffectiveDated`).
+
+**Primary sources, in order of strength:**
+
+1. **CT DSS applying the rule in an actual adjudicated case** — CT DSS Office of Legal Counsel, Regulations, and Administrative Hearings, *Notice of Decision*, Fair Hearing Request #227136 (2023), a real SNAP benefit-amount appeal. The decision quotes 7 C.F.R. § 273.9(d)(6)(ii) in full, including: *"If the household does not contain an elderly or disabled member, as defined in §271.2 of this chapter, the shelter deduction cannot exceed the maximum shelter deduction limit established for the area."* It then applies that rule to the appellant's household, finding: **"The Department correctly determined the Appellant's household is not eligible for an uncapped shelter deduction based on disability or age"** (Finding of Fact #7: "There are no elderly or disabled household members"). The decision's own benefit-calculation worksheet has a line item labeled **"Total shelter hardship $672.00 (Cannot exceed $672.00 unless elderly or disabled)"** — CT DSS's own words, in CT DSS's own case math, stating the cap is conditional on elderly/disabled status. Source: https://portal.ct.gov/dss/-/media/departments-and-agencies/dss/fair-hearings/snap-eligibility/snap-eligibility-2023/snap_2023_227136.pdf?rev=3fe39604b9194643b8a8f5673b79ca43
+2. **CT DSS's own caseworker computation form** — Form W-1216 (Rev. 10/21), *Supplemental Nutrition Assistance Program (SNAP) Computation Sheet*, State of Connecticut Department of Social Services: **"Shelter hardship cannot exceed $597 unless AU has member 60 or older, or disabled."** (The $597 is a stale, pre-FY2026 cap from the form's last revision — the mechanism statement, not the dollar figure, is what this citation is for.) Source: https://portal.ct.gov/-/media/Departments-and-Agencies/DSS/SNAP/W-1216.doc
+3. **Federal legal basis** — 7 CFR § 273.9(d)(6)(ii), via Cornell LII: the shelter deduction is "[m]onthly shelter expenses in excess of 50 percent of the household's income after all other deductions... have been allowed," capped only "if the household does not contain an elderly or disabled member, as defined in §271.2." https://www.law.cornell.edu/cfr/text/7/273.9 · elderly/disabled definition: https://www.law.cornell.edu/cfr/text/7/271.2
+4. **CT DSS Program Standards Chart, eff. 7/1/2026** (the chart already cited throughout this document): lists a single flat **"Max Shelter Hardship $744"** line in the SNAP standards box, with no separate elderly/disabled line or footnote on the chart itself — consistent with $744 being *only* the non-elderly/disabled cap (matching source #1 and #2 above), not a statement that the cap applies universally. The chart does not, by itself, mention the exemption; sources #1–#3 supply that. https://portal.ct.gov/dss/-/media/departments-and-agencies/dss/fact-sheets-and-issue-briefs/fact-sheets/dss-program-standards-chart-effective-070126.pdf
+
+**Note on access:** the CT DSS public policy-manual mirror (portaldir.ct.gov, e.g. the "Shelter Expenses" UPM page) returns a bot-mitigation "Request Rejected" challenge page to automated fetches — the same failure mode already logged for stamfordct.gov in §6. The Fair Hearing decision and W-1216 form, both hosted on portal.ct.gov's media library, were fetchable and did not hit this block.
+
+**ADR-0007 implication:** the demo beat (a member turning 60+ removes the SNAP shelter cap, changing the SNAP figure on stage) is **safe to keep relying on as a rules-level fact.** It is real CT DSS policy, applied in real CT DSS casework, not an invented consequence. Nothing here changes ADR-0007's own caveat that the moment can still fail to *fire* live for reasons unrelated to the underlying rule (income levels not actually crossing the 50%-of-income shelter threshold, shelter costs too low to produce a visible swing, etc.) — that risk is about the demo household's specific numbers, not about whether the rule exists.
 
 ### Asset limits (CT)
 
