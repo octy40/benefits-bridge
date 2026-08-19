@@ -20,6 +20,7 @@ import type { ProgramResult, ScreeningResult } from "@/rules/types";
  */
 const PROGRAM_NAMES: Record<string, string> = {
   snap: "SNAP food assistance",
+  ceap: "CEAP energy assistance",
 };
 
 /**
@@ -33,6 +34,13 @@ const PROGRAM_NAMES: Record<string, string> = {
 const FIGURE_BLOCKER_NAMES: Record<string, string> = {
   rent: "what you pay in rent",
   "utility-costs": "which utilities you pay for",
+  // A household is only ever asked this when age alone could not already
+  // settle CEAP's vulnerable-household distinction.
+  disability: "whether anyone in your household has a disability",
+  // Reaches a figure-blocker line only through CEAP's categorical-eligibility
+  // path: the household is already known likely-eligible from Program
+  // receipt, and income is still what prices the figure.
+  "income-sources": "what your household brings in",
 };
 
 export function EligibilityMapPanel({ screening }: { screening: ScreeningResult }) {
@@ -47,7 +55,12 @@ export function EligibilityMapPanel({ screening }: { screening: ScreeningResult 
       <div className="map-headline">
         <p className="map-headline-label">Likely available to you each year</p>
         <p className="map-headline-total">{formatMoney(screening.headlineAnnualTotal)}</p>
-        <p className="map-headline-note">This estimate updates as we learn more.</p>
+        <p className="map-headline-note">
+          This estimate updates as we learn more.
+          {screening.headlineAnnualTotalProvisional
+            ? " It includes a proposed figure that is not yet final."
+            : null}
+        </p>
       </div>
 
       {isEmpty ? (
@@ -93,7 +106,15 @@ function EntryGroup({ entries, heading }: { entries: ProgramResult[]; heading?: 
         <ol className="map-tier">
           {withFigures.map((entry) => (
             <li key={entry.programId} className="map-entry">
-              <span className="map-entry-name">{nameOf(entry)}</span>
+              <span className="map-entry-name">
+                {nameOf(entry)}
+                {/*
+                  A caption is prose a reader has to interpret; `provisional`
+                  is a fact this panel acts on directly (ADR-0010). CEAP's
+                  FFY2027 season is the first figure carrying it.
+                */}
+                {entry.figures?.provisional ? <span className="map-entry-provisional">Proposed</span> : null}
+              </span>
               <span className="map-entry-figure">{formatMoney(entry.figures!.annual)} a year</span>
               <span className="map-entry-basis">{monthlyAndBasis(entry)}</span>
             </li>

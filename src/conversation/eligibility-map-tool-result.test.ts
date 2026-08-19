@@ -78,6 +78,42 @@ describe("buildEligibilityMapToolResult", () => {
     );
   });
 
+  it("flags a figure the issuing agency has not finalised, so the model says 'proposed'", () => {
+    // CEAP's FFY2027 season, as of this research: the fact sheet itself calls
+    // the amounts proposed. The model must be told directly rather than left
+    // to infer it from the basis string (ADR-0010).
+    const proposed: ScreeningResult = {
+      ...emptyMap(1),
+      programs: [
+        {
+          programId: "ceap",
+          outcome: "likely-eligible",
+          unit: ["self"],
+          figures: { annual: 84_500, basis: "2026-27 heating season — proposed, not final", provisional: true },
+          blockedBy: [],
+        },
+      ],
+      headlineAnnualTotal: 84_500,
+    };
+
+    expect(build(proposed, emptyMap(0)).programs[0]!.provisional).toBe(true);
+  });
+
+  it("omits the provisional flag for a finalised figure", () => {
+    expect(build(mapWithSnap(1, 360_000, 30_000), emptyMap(0)).programs[0]).not.toHaveProperty("provisional");
+  });
+
+  it("flags the headline total when it includes a provisional figure", () => {
+    const withProvisionalHeadline: ScreeningResult = {
+      ...emptyMap(1),
+      headlineAnnualTotal: 84_500,
+      headlineAnnualTotalProvisional: true,
+    };
+
+    expect(build(withProvisionalHeadline, emptyMap(0)).headlineAnnualTotalProvisional).toBe(true);
+    expect(build(emptyMap(1), emptyMap(0))).not.toHaveProperty("headlineAnnualTotalProvisional");
+  });
+
   it("shows an entry that is scored but still waiting on a figure", () => {
     // SNAP knows a household is likely eligible before it knows their rent. The
     // model has to be able to say so — and must not be handed a figure for it.

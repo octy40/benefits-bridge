@@ -38,6 +38,10 @@ const ASK_ORDER: Record<FactId, number> = {
   "work-hours": 3,
   rent: 4,
   "utility-costs": 5,
+  // Last, because it never gates an outcome — only CEAP's vulnerable-household
+  // dollar figure — and age alone already settles most households (a member
+  // 60+ or a child under 6) before this is ever reached.
+  disability: 6,
 };
 
 /**
