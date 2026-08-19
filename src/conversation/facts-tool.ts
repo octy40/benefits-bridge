@@ -165,10 +165,12 @@ export const recordHouseholdFactsTool = {
         type: "array",
         items: { type: "string" },
         description:
-          "Benefits the household already receives, e.g. 'snap', 'husky', 'tfa', 'ssi', " +
-          "'refugee-cash-assistance', 'state-supplement'. A household already receiving SNAP, TFA, " +
-          "Refugee Cash Assistance, State Supplement, or SSI does not need to prove its income again " +
-          "for CEAP energy assistance — recording this is what unlocks that.",
+          "Benefits the household already receives, e.g. 'snap', 'husky', 'tfa', 'ssi', 'ssdi', " +
+          "'refugee-cash-assistance', 'state-supplement', 'medicaid', 'federal-public-housing-assistance', " +
+          "'veterans-pension', 'section-8'. A household already receiving SNAP, TFA, Refugee Cash " +
+          "Assistance, State Supplement, or SSI does not need to prove its income again for CEAP energy " +
+          "assistance, and several of these also unlock Keychain discounts on their own — recording " +
+          "this is what unlocks all of that.",
       },
       immigrationStatus: {
         type: "string",

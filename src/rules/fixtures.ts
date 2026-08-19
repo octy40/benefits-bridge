@@ -176,6 +176,35 @@ export const ceapCategoricalHousehold: HouseholdProfile = {
 };
 
 /**
+ * The case a Keychain lookup keyed off SNAP would have broken (issue #21).
+ *
+ * A single Stamford resident earning $40,000 a year — over Connecticut's SNAP
+ * limit for a household of one ($31,308/year, 200% BBCE) and never having
+ * received SNAP, so a Lifeline or utility Low-Income Discount Rate screened
+ * only off SNAP participation would come back with nothing. The utility
+ * discount rate's own income test reaches further: $40,000 clears its 15%
+ * tier ceiling ($33,676) and lands under its 5% tier ceiling ($48,714, 60%
+ * State Median Income for the FFY2027 season DSS has already priced the
+ * utility's live table from) — likely-eligible at the loosest tier on income
+ * alone, with nobody's participation in anything else in play.
+ *
+ * Lifeline's own income route (135% FPL, $21,546 for a household of one) does
+ * not reach this far, so it screens `likely-ineligible` here — the fixture is
+ * deliberately built so only one Keychain entry carries the case, not both.
+ */
+export const lidrIncomeOnlyHousehold: HouseholdProfile = {
+  members: [
+    {
+      id: "self",
+      age: 40,
+      relationship: "self",
+      incomeSources: [{ type: "wages", amount: 4_000_000, period: "annual" }],
+    },
+  ],
+  town: "Stamford",
+};
+
+/**
  * Denise, alone. $1,500 a month is under HUSKY D's 138% FPL line for a
  * household of one ($1,836) — a Program with no figure and no dependent child
  * in the home to route her to HUSKY A instead (`docs/ct-program-facts.md`

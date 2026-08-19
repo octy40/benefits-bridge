@@ -1,4 +1,8 @@
 import { rankBlockingFacts } from "./facts";
+import { screenLifeline } from "./keychain/lifeline";
+import { screenLidr } from "./keychain/lidr";
+import { screenMuseumsForAll } from "./keychain/museums-for-all";
+import type { KeychainRule } from "./keychain-rule";
 import type { ProgramRule, ProgramScreening } from "./program-rule";
 import { screenCare4Kids } from "./programs/care-4-kids";
 import { screenCeap } from "./programs/ceap";
@@ -22,6 +26,13 @@ import type {
  * blocked on (ADR-0002).
  */
 const PROGRAM_RULES: ProgramRule[] = [screenSnap, screenCeap, screenHuskyA, screenHuskyD, screenCare4Kids];
+
+/**
+ * Every Keychain entry BenefitBridge screens, run after `PROGRAM_RULES` for
+ * the reason `screen` below explains: a Keychain rule may read Program
+ * outcomes as well as the Household profile (`keychain/lidr.ts` reads CEAP's).
+ */
+const KEYCHAIN_RULES: KeychainRule[] = [screenLifeline, screenLidr, screenMuseumsForAll];
 
 /**
  * The single seam. All Screening lives behind this function.
@@ -50,10 +61,11 @@ export function screen(
   const programs = screenings.flatMap((screening) => screening.result ?? []);
 
   // The Keychain is a second pass, because a Keychain rule may read Program
-  // outcomes as well as the Household profile. It arrives with its entries.
-  const keychain: ProgramResult[] = [];
+  // outcomes as well as the Household profile.
+  const keychainScreenings = KEYCHAIN_RULES.map((rule) => rule(profile, programs, asOf));
+  const keychain = keychainScreenings.flatMap((screening) => screening.result ?? []);
 
-  const blockingFacts = rankBlockingFacts(screenings);
+  const blockingFacts = rankBlockingFacts([...screenings, ...keychainScreenings]);
   const headlineEntries = [...programs, ...keychain];
 
   return {
