@@ -8,12 +8,11 @@ import {
   today,
   type ConversationState,
 } from "@/conversation/agent-loop";
+import { LANGUAGES, type Language } from "@/language";
 import type { ScreeningResult } from "@/rules/types";
-import { copyFor, LANGUAGES, type Language } from "./copy";
+import { copyFor } from "./copy";
 import { EligibilityMapPanel } from "./EligibilityMapPanel";
-
-/** What the Resident sees of the conversation. Separate from what the model sees. */
-type Bubble = { id: number; speaker: "resident" | "benefitbridge"; text: string };
+import { withoutTrailingNarration, type Bubble } from "./transcript";
 
 export function ConversationView() {
   const asOf = useRef(today());
@@ -87,20 +86,26 @@ export function ConversationView() {
     // be, so the screen is coherent the moment it arrives rather than showing
     // the same answer twice in two languages. Everything above it is left as
     // the Resident and BenefitBridge actually said it.
-    let replacingLastNarration = true;
+    //
+    // The swap waits for the first word of the replacement rather than
+    // happening when the turn opens. A request that fails — or one the Resident
+    // walks away from — must not leave a hole where BenefitBridge's answer was:
+    // until there is something to put there, what is on screen stays on screen.
+    let awaitingReplacement = true;
 
     try {
       conversation.current = await switchLanguage(conversation.current, chosen, asOf.current, {
         onAssistantTurnStart: () => {
-          const bubble = newBubble("benefitbridge", "");
-          const replacing = replacingLastNarration;
-          setBubbles((current) => [
-            ...(replacing ? withoutTrailingNarration(current) : current),
-            bubble,
-          ]);
-          replacingLastNarration = false;
+          if (awaitingReplacement) return;
+          setBubbles((current) => [...current, newBubble("benefitbridge", "")]);
         },
-        onAssistantText: appendToLastBubble,
+        onAssistantText: (delta) => {
+          if (!awaitingReplacement) return appendToLastBubble(delta);
+
+          const bubble = newBubble("benefitbridge", delta);
+          awaitingReplacement = false;
+          setBubbles((current) => [...withoutTrailingNarration(current), bubble]);
+        },
         onScreening: setScreening,
       });
     } catch (error) {
@@ -122,7 +127,15 @@ export function ConversationView() {
     );
   }
 
+  /**
+   * Upstream failures — the proxy's and the API's alike — are written in English
+   * and nowhere else. Showing one to a Resident who just asked for Spanish is
+   * the flow not really being in Spanish, which is the whole of what this
+   * ticket is about, so they get the one sentence BenefitBridge can actually
+   * say in their language instead.
+   */
   function describeFailure(error: unknown): string {
+    if (language !== "en") return copy.genericFailure;
     return error instanceof Error ? error.message : copy.genericFailure;
   }
 
@@ -205,16 +218,4 @@ export function ConversationView() {
       <EligibilityMapPanel screening={screening} language={language} />
     </main>
   );
-}
-
-/**
- * Everything up to, but not including, the run of bubbles BenefitBridge last
- * spoke. One answer can occupy more than one bubble — the model speaks before
- * calling the tool and again after seeing the result — and re-narrating half of
- * it would leave the other half stranded in the language the Resident just left.
- */
-function withoutTrailingNarration(bubbles: Bubble[]): Bubble[] {
-  let end = bubbles.length;
-  while (end > 0 && bubbles[end - 1].speaker === "benefitbridge") end--;
-  return bubbles.slice(0, end);
 }

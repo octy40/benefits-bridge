@@ -1,6 +1,7 @@
+import type { Language } from "@/language";
 import { formatMoney } from "@/money";
-import type { ProgramResult, ScreeningResult } from "@/rules/types";
-import { copyFor, figureBlockerName, programName, type Language } from "./copy";
+import type { ProgramId, ProgramResult, ScreeningResult } from "@/rules/types";
+import { copyFor, figureBlockerName, programName, type Copy } from "./copy";
 
 /**
  * The eligibility map, resolved into the exact strings a Resident reads.
@@ -29,12 +30,13 @@ export type MapGroup = {
   heading?: string;
   withFigures: FigureEntry[];
   withoutFigures: ReasonEntry[];
-  indeterminateHeading: string;
+  /** Present only when `indeterminate` has something under it to head. */
+  indeterminateHeading?: string;
   indeterminate: ReasonEntry[];
 };
 
 export type FigureEntry = {
-  programId: string;
+  programId: ProgramId;
   name: string;
   /** The badge text, present only on a figure its own agency has not finalised. */
   provisional?: string;
@@ -44,7 +46,7 @@ export type FigureEntry = {
   detail: string;
 };
 
-export type ReasonEntry = { programId: string; name: string; reason: string };
+export type ReasonEntry = { programId: ProgramId; name: string; reason: string };
 
 export function eligibilityMapView(screening: ScreeningResult, language: Language): MapView {
   const copy = copyFor(language).map;
@@ -65,19 +67,23 @@ export function eligibilityMapView(screening: ScreeningResult, language: Languag
     },
     ...(programs.length === 0 && keychain.length === 0 ? { empty: copy.empty } : {}),
     groups: [
-      group(programs, language),
+      group(programs, copy, language),
       // The Keychain is grouped separately because nobody administers these
       // together, not because they are computed differently — same rendering,
       // different grouping (CONTEXT.md, *Keychain*).
-      group(keychain, language, copy.keychainHeading),
+      group(keychain, copy, language, copy.keychainHeading),
     ].filter((entry) => entry !== undefined),
     caveat: copy.caveat,
   };
 }
 
-function group(entries: ProgramResult[], language: Language, heading?: string): MapGroup | undefined {
+function group(
+  entries: ProgramResult[],
+  copy: Copy["map"],
+  language: Language,
+  heading?: string,
+): MapGroup | undefined {
   if (entries.length === 0) return undefined;
-  const copy = copyFor(language).map;
 
   // Split on `outcome` before splitting on `figures`. An Indeterminate entry
   // also has no figure, and grouped by figures alone it would sit in the
@@ -90,15 +96,18 @@ function group(entries: ProgramResult[], language: Language, heading?: string): 
 
   return {
     ...(heading ? { heading } : {}),
-    withFigures: scored.filter((entry) => entry.figures).map((entry) => figureEntry(entry, language)),
-    withoutFigures: scored.filter((entry) => !entry.figures).map((entry) => reasonEntry(entry, language)),
-    indeterminateHeading: copy.indeterminateHeading,
-    indeterminate: indeterminate.map((entry) => reasonEntry(entry, language)),
+    withFigures: scored
+      .filter((entry) => entry.figures)
+      .map((entry) => figureEntry(entry, copy, language)),
+    withoutFigures: scored
+      .filter((entry) => !entry.figures)
+      .map((entry) => reasonEntry(entry, copy, language)),
+    ...(indeterminate.length > 0 ? { indeterminateHeading: copy.indeterminateHeading } : {}),
+    indeterminate: indeterminate.map((entry) => reasonEntry(entry, copy, language)),
   };
 }
 
-function figureEntry(entry: ProgramResult, language: Language): FigureEntry {
-  const copy = copyFor(language).map;
+function figureEntry(entry: ProgramResult, copy: Copy["map"], language: Language): FigureEntry {
   const figures = entry.figures!;
 
   return {
@@ -122,16 +131,15 @@ function figureEntry(entry: ProgramResult, language: Language): FigureEntry {
   };
 }
 
-function reasonEntry(entry: ProgramResult, language: Language): ReasonEntry {
+function reasonEntry(entry: ProgramResult, copy: Copy["map"], language: Language): ReasonEntry {
   return {
     programId: entry.programId,
     name: programName(entry.programId, language),
-    reason: reasonForNoFigure(entry, language),
+    reason: reasonForNoFigure(entry, copy, language),
   };
 }
 
-function reasonForNoFigure(entry: ProgramResult, language: Language): string {
-  const copy = copyFor(language).map;
+function reasonForNoFigure(entry: ProgramResult, copy: Copy["map"], language: Language): string {
 
   // The outcome is tested first, and the order is load-bearing rather than
   // stylistic. HUSKY carries `noFigureReason: "coverage-not-cash"`, and an

@@ -1,5 +1,5 @@
+import type { Language } from "@/language";
 import type { ScreeningResult } from "@/rules/types";
-import type { Language } from "./copy";
 import { eligibilityMapView, type MapGroup, type ReasonEntry } from "./eligibility-map-view";
 
 /**

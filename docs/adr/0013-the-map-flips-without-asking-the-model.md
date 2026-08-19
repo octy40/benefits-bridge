@@ -48,8 +48,9 @@ deliberate act.
 
 Adding a Program now means adding a row to `src/ui/copy.ts` in every language as well as
 writing its rules, and `eligibility-map-view.test.ts` fails if the row is missed rather
-than letting a raw Program id reach a Resident's screen. Adding a *language* means adding
-a column and translating one file; nothing else in the product knows how many there are.
+than letting a raw Program id reach a Resident's screen. Adding a *language* means adding a
+row to `src/language.ts` and a column to `src/ui/copy.ts`; nothing else in the product knows
+how many there are, and nothing else names them.
 
 Dollar figures are outside the table entirely. Amounts are formatted once by `money.ts`
 and interpolated into sentences the table supplies, so the entries that carry an amount

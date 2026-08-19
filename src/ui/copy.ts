@@ -1,3 +1,4 @@
+import type { Language } from "@/language";
 import type { FactId, ProgramId } from "@/rules/types";
 
 /**
@@ -19,18 +20,6 @@ import type { FactId, ProgramId } from "@/rules/types";
  *
  * Demo scaffolding, like the rest of the interface (ADR-0011).
  */
-
-export type Language = "en" | "es";
-
-/**
- * Each language named in itself. A Resident looking for Spanish is looking for
- * "Español", not for whatever the language they are currently reading calls it,
- * so these are the one set of strings the toggle never translates.
- */
-export const LANGUAGES: readonly { code: Language; endonym: string }[] = [
-  { code: "en", endonym: "English" },
-  { code: "es", endonym: "Español" },
-];
 
 /** One row per language, so a missing translation is missing where it is written. */
 type Translated = Record<Language, string>;
@@ -59,7 +48,7 @@ const PROGRAM_NAMES: Record<ProgramId, Translated> = {
   },
   lidr: {
     en: "Utility Low-Income Discount Rate",
-    es: "Tarifa de descuento para hogares de bajos ingresos",
+    es: "Tarifa de descuento en servicios públicos para hogares de bajos ingresos",
   },
   "museums-for-all": { en: "Museums for All", es: "Museums for All" },
 };
@@ -76,7 +65,7 @@ const FIGURE_BLOCKER_NAMES: Partial<Record<FactId, Translated>> = {
   rent: { en: "what you pay in rent", es: "cuánto paga de alquiler" },
   "utility-costs": {
     en: "which utilities you pay for",
-    es: "qué servicios públicos paga usted",
+    es: "qué servicios públicos paga",
   },
   // A household is only ever asked this when age alone could not already
   // settle CEAP's vulnerable-household distinction.
@@ -170,7 +159,7 @@ const COPY: Record<Language, Copy> = {
         `There is a queue — about ${months} months. Your place is set by your application date, so apply now.`,
       waitingOnFacts: (facts) => `You likely qualify — tell us ${facts} and this gets a figure.`,
       noFigureYet: "You likely qualify — we are still working out what it is worth.",
-      joinFacts: (facts) => joinWith(facts, "and"),
+      joinFacts: (facts) => joinWith(facts, () => "and"),
     },
   },
 
@@ -194,8 +183,8 @@ const COPY: Record<Language, Copy> = {
       headlineProvisionalNote: " Incluye una cifra propuesta que todavía no es definitiva.",
       empty:
         "Todavía no hay nada que mostrar. Cuéntele a BenefitBridge sobre su hogar y esto se irá llenando mientras conversan.",
-      keychainHeading: "Descuentos que su elegibilidad le abre",
-      indeterminateHeading: "Estos no los podemos ubicar ni de un lado ni del otro — y esa decisión es suya",
+      keychainHeading: "Descuentos a los que su elegibilidad le da acceso",
+      indeterminateHeading: "De estos no podemos decir ni que sí ni que no — y esa decisión es suya",
       provisionalBadge: "Propuesta",
       // "Evaluación preliminar", never "decisión": BenefitBridge screens, and
       // the Spanish has to hold that line as firmly as the English does
@@ -205,13 +194,13 @@ const COPY: Record<Language, Copy> = {
       perYear: (amount) => `${amount} al año`,
       perMonth: (amount) => `${amount} al mes`,
       indeterminateReason:
-        "Este no lo podemos ubicar ni de un lado ni del otro sin saber sobre el estatus migratorio — y usted no tiene que decírnoslo.",
-      coverageNotCash: "Es cobertura, no dinero — no hay una cifra en dólares que dar.",
+        "De este no podemos decir ni que sí ni que no sin saber sobre el estatus migratorio — y usted no tiene que decírnoslo.",
+      coverageNotCash: "Es cobertura, no dinero — no hay una cifra en dólares que podamos dar.",
       waitlisted: (months) =>
         `Hay una lista de espera — de unos ${months} meses. Su lugar lo fija la fecha de su solicitud, así que solicítelo ahora.`,
       waitingOnFacts: (facts) => `Probablemente califica — cuéntenos ${facts} y esto tendrá una cifra.`,
       noFigureYet: "Probablemente califica — todavía estamos calculando cuánto vale.",
-      joinFacts: (facts) => joinWith(facts, "y"),
+      joinFacts: (facts) => joinWith(facts, spanishAnd),
     },
   },
 };
@@ -220,7 +209,25 @@ export function copyFor(language: Language): Copy {
   return COPY[language];
 }
 
-function joinWith(phrases: string[], conjunction: string): string {
+/** The conjunction is a function of what follows it, because in Spanish it is. */
+function joinWith(phrases: string[], conjunction: (following: string) => string): string {
   if (phrases.length <= 1) return phrases.join("");
-  return `${phrases.slice(0, -1).join(", ")} ${conjunction} ${phrases[phrases.length - 1]}`;
+  const last = phrases[phrases.length - 1];
+  return `${phrases.slice(0, -1).join(", ")} ${conjunction(last)} ${last}`;
+}
+
+/**
+ * "y", except before a word that starts with the *sound* i — where it becomes
+ * "e", to keep the two vowels from running together. "hie-" is the exception to
+ * the exception: "hielo" opens on a consonantal glide, so "y hielo" is right.
+ *
+ * No blocking fact triggers it today. It is here because a table this small
+ * either encodes the language's rules or quietly gets them wrong the first time
+ * someone adds a phrase, and the phrase that would break it — anything opening
+ * on *ingresos* — is one row away.
+ */
+function spanishAnd(following: string): string {
+  const word = following.toLowerCase();
+  if (word.startsWith("hie")) return "y";
+  return word.startsWith("i") || word.startsWith("hi") ? "e" : "y";
 }

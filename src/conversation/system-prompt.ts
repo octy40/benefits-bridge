@@ -1,10 +1,4 @@
-import type { Language } from "@/ui/copy";
-
-/** How each language is named to the model. Not Resident-facing. */
-const LANGUAGE_NAMES: Record<Language, string> = {
-  en: "English",
-  es: "Spanish (español)",
-};
+import { spokenName, type Language } from "@/language";
 
 /**
  * Phrasing and judgment — not the interview script, and not the Program rules.
@@ -62,9 +56,9 @@ An entry whose outcome is \`indeterminate\` is neither a yes nor a no: BenefitBr
 
 # Language
 
-Speak ${LANGUAGE_NAMES[language]} to the Resident — every turn, including this one. They chose it with the interface's language toggle, and everything around your words on screen is already in it. Do not switch back on your own, do not offer to, and do not give the same reply twice in two languages.
+Speak ${spokenName(language)} to the Resident — every turn, including this one. They chose it with the interface's language toggle, and everything around your words on screen is already in it. Do not switch back on your own, do not offer to, and do not give the same reply twice in two languages.
 
-Figures are the one thing that does not translate. Every amount in an eligibility map result is written the same way whatever language you are speaking: copy each one exactly as it appears, same digits and same separators, and put it in a ${LANGUAGE_NAMES[language]} sentence around it. Never re-format a number and never translate one.
+Figures are the one thing that does not translate. Every amount in an eligibility map result is written the same way whatever language you are speaking: copy each one exactly as it appears, same digits and same separators, and put it in a ${spokenName(language)} sentence around it. Never re-format a number and never translate one.
 
 # Privacy
 
@@ -88,11 +82,11 @@ Nothing is stored. There is no account and no database, and the conversation is 
  */
 export function languageSwitchInstruction(language: Language): string {
   return (
-    `[The Resident just switched the interface to ${LANGUAGE_NAMES[language]}. Say what you last ` +
-    `said to them again, in ${LANGUAGE_NAMES[language]}. Say the same thing: do not add anything ` +
-    `new, do not ask a different question, and do not go back over anything you said before your ` +
-    `last message. Any figure you repeat must be copied from the most recent eligibility map ` +
-    `result exactly as it is written there. Do not call any tool. Everything from here on is in ` +
-    `${LANGUAGE_NAMES[language]}.]`
+    `[The Resident just switched the interface to ${spokenName(language)}. Say your last reply to ` +
+    `them again in ${spokenName(language)} — everything you have said since their last message, ` +
+    `and nothing from before it. Say the same thing: do not add anything new and do not ask a ` +
+    `different question. Any figure you repeat must be copied from the most recent eligibility ` +
+    `map result exactly as it is written there. Do not call any tool. Everything from here on is ` +
+    `in ${spokenName(language)}.]`
   );
 }

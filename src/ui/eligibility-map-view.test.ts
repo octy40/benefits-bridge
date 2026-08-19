@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import * as fixtures from "@/rules/fixtures";
 import { screen } from "@/rules/screen";
 import type { HouseholdProfile, ProgramResult, ScreeningResult } from "@/rules/types";
-import { LANGUAGES, programName } from "./copy";
+import { LANGUAGES } from "@/language";
+import { programName } from "./copy";
 import { eligibilityMapView, type MapView } from "./eligibility-map-view";
 
 const emptyMap: ScreeningResult = {
@@ -89,7 +90,7 @@ describe("eligibilityMapView", () => {
       "Discounts your eligibility unlocks",
     ]);
     expect(eligibilityMapView(map, "es").groups[1].heading).toBe(
-      "Descuentos que su elegibilidad le abre",
+      "Descuentos a los que su elegibilidad le da acceso",
     );
     expect(eligibilityMapView(map, "es").groups[1].withFigures[0].name).toBe(
       "Lifeline (descuento de teléfono e internet)",
@@ -112,7 +113,7 @@ describe("eligibilityMapView", () => {
       "You likely qualify — tell us what you pay in rent and which utilities you pay for and this gets a figure.",
     );
     expect(eligibilityMapView(map, "es").groups[0].withoutFigures[0].reason).toBe(
-      "Probablemente califica — cuéntenos cuánto paga de alquiler y qué servicios públicos paga usted y esto tendrá una cifra.",
+      "Probablemente califica — cuéntenos cuánto paga de alquiler y qué servicios públicos paga y esto tendrá una cifra.",
     );
   });
 

@@ -3,8 +3,8 @@ import { emptyHouseholdProfile, type HouseholdProfile, type ScreeningResult } fr
 import { collectAssistantTurn, type AssistantContentBlock } from "./anthropic-stream";
 import { buildEligibilityMapToolResult } from "./eligibility-map-tool-result";
 import { mergeFacts, recordHouseholdFactsTool, type RecordedFacts } from "./facts-tool";
+import type { Language } from "@/language";
 import { buildSystemPrompt, languageSwitchInstruction } from "./system-prompt";
-import type { Language } from "@/ui/copy";
 
 /**
  * The agent loop, running on the Resident's device.
@@ -74,13 +74,13 @@ export type TurnHandlers = {
   onScreening: (screening: ScreeningResult) => void;
 };
 
-export function newConversation(asOf: string, language: Language = "en"): ConversationState {
+export function newConversation(asOf: string): ConversationState {
   return {
     messages: [],
     profile: emptyHouseholdProfile(),
     screening: screen(emptyHouseholdProfile(), asOf, 0),
     statusQuestionOffered: false,
-    language,
+    language: "en",
   };
 }
 
