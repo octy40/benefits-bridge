@@ -17,3 +17,17 @@ export function formatMoneyDelta(cents: Money): string {
   if (dollars === 0) return "no change";
   return dollars > 0 ? `+${formatMoney(cents)}` : formatMoney(cents);
 }
+
+/**
+ * Whether a change survives being rounded to the dollars a Resident reads.
+ *
+ * The one case `formatMoneyDelta` answers with a *word* rather than an amount
+ * is the one where nothing moved — and that word is written in English, which
+ * is the single thing ADR-0013 keeps off the eligibility map. A caller that
+ * must not render it asks here rather than testing the cents itself: forty
+ * cents is not zero, and a caller comparing against zero would print
+ * "no change" onto a Spanish panel.
+ */
+export function moneyDeltaIsVisible(cents: Money): boolean {
+  return Math.round(cents / 100) !== 0;
+}

@@ -6,10 +6,17 @@ import {
   deniseAlone,
   deniseWithHerSon,
   lidrIncomeOnlyHousehold,
+  mariaAfterHerMother,
   mariaBeforeHerMother,
+  rebateComputesToNothingHousehold,
 } from "./fixtures";
 import { screen } from "./screen";
-import { emptyHouseholdProfile, type HouseholdProfile, type Member } from "./types";
+import {
+  emptyHouseholdProfile,
+  type HouseholdProfile,
+  type Member,
+  type ScreeningResult,
+} from "./types";
 
 /**
  * Per the spec, tests assert on the whole `ScreeningResult` for a given
@@ -74,7 +81,16 @@ describe("screen", () => {
       blockingFacts: [
         {
           factId: "household-members",
-          blocks: ["snap", "ceap", "husky-a", "husky-d", "care-4-kids", "lifeline", "lidr"],
+          blocks: [
+            "snap",
+            "ceap",
+            "husky-a",
+            "husky-d",
+            "care-4-kids",
+            "renters-rebate",
+            "lifeline",
+            "lidr",
+          ],
         },
         { factId: "income-sources", blocks: ["snap", "ceap", "lifeline", "lidr"] },
         { factId: "food-sharing", blocks: ["snap"] },
@@ -1561,5 +1577,378 @@ describe("Care 4 Kids: waitlisted, never a figure", () => {
     expect(
       screen(mariaBeforeHerMother, "2026-10-01", 0).programs.map((program) => program.programId),
     ).not.toContain("care-4-kids");
+  });
+});
+
+describe("the CT Elderly/Disabled Renters' Rebate", () => {
+  /** The rebate's own entry on a map, wherever a test needs it. */
+  const rebate = (profile: HouseholdProfile, asOf = ASOF) =>
+    screen(profile, asOf, 0).programs.find((program) => program.programId === "renters-rebate");
+
+  /**
+   * An applicant alone in her apartment, so no proration, and comfortably clear
+   * of both the income limit and the maximum grant:
+   *
+   *   35% of $12,000 rent                       = $4,200.00
+   *   5% of $12,000 qualifying income           =   $600.00
+   *   grant before the table's maximum          = $3,600.00
+   *   maximum grant, unmarried                  =   $700.00
+   */
+  const socialSecurity = (monthly: number) => [
+    { type: "social-security" as const, amount: monthly, period: "monthly" as const },
+  ];
+
+  const elderlyRenter = (overrides: Partial<Member> = {}, rest: Partial<HouseholdProfile> = {}) => ({
+    members: [member("self", { age: 70, incomeSources: socialSecurity(100_000), ...overrides })],
+    monthlyRent: 100_000,
+    ...rest,
+  });
+
+  it("scores the lesser of the income table's maximum and 35% of rent less 5% of qualifying income", () => {
+    expect(rebate(elderlyRenter())!.figures).toEqual({
+      annual: 70_000,
+      basis: "2026 program year (2025 rent and income)",
+    });
+
+    // The same applicant on a rent low enough that the computed amount is what
+    // binds instead of the maximum: 35% of $3,600 is $1,260, less $600, is
+    // $660 — under the $700 maximum, so the maximum is not what she gets.
+    expect(rebate(elderlyRenter({}, { monthlyRent: 30_000 }))!.figures!.annual).toBe(66_000);
+  });
+
+  /**
+   * Q57, and the case the ticket asked to be proved directly: a household that
+   * clears the income test can still be owed nothing, and BenefitBridge has to
+   * say nothing rather than round a negative up to something.
+   */
+  it("yields nothing, rather than a spurious figure, when 35% of rent falls below 5% of qualifying income", () => {
+    const entry = rebate(rebateComputesToNothingHousehold)!;
+
+    expect(entry.outcome).toBe("likely-ineligible");
+    expect(entry.figures).toBeUndefined();
+
+    // And it is the Social Security that decides it. Strip it out — leaving the
+    // $1,500-a-month pension — and 5% of $18,000 is $900 against 35% of $6,000,
+    // which is $2,100, so she is owed $1,200 and receives the $700 maximum.
+    // Qualifying income counting *all* income is the whole difference between
+    // no rebate at all and the largest one the table allows.
+    const pensionOnly = {
+      ...rebateComputesToNothingHousehold,
+      members: [
+        {
+          ...rebateComputesToNothingHousehold.members[0]!,
+          incomeSources: [{ type: "other" as const, amount: 150_000, period: "monthly" as const }],
+        },
+      ],
+    };
+    expect(rebate(pensionOnly)!.figures!.annual).toBe(70_000);
+  });
+
+  it("counts a member's Social Security in full, where SNAP counts it as unearned and deducts nothing from it", () => {
+    // $2,000 a month of Social Security: 5% of $24,000 is $1,200, against 35%
+    // of $12,000 of rent, which is $4,200 — still capped at the maximum. Raise
+    // it to $10,000 a month and the applicant is over the $46,300 limit, which
+    // only happens because Social Security is counted at all.
+    expect(rebate(elderlyRenter({ incomeSources: socialSecurity(200_000) }))!.outcome).toBe(
+      "likely-eligible",
+    );
+    expect(rebate(elderlyRenter({ incomeSources: socialSecurity(1_000_000) }))!.outcome).toBe(
+      "likely-ineligible",
+    );
+  });
+
+  it("prorates a shared apartment across the unmarried adults in it, and never across the children", () => {
+    // A rent low enough that the computation binds rather than the maximum, so
+    // proration is visible in the figure at all: 35% of $3,600 less 5% of
+    // $12,000 is $660.
+    const modestRent = elderlyRenter({}, { monthlyRent: 30_000 });
+    expect(rebate(modestRent)!.figures!.annual).toBe(66_000);
+
+    // A second adult in the apartment: half the rent each regardless of who
+    // actually pays it or what they earn (Q&A booklet Q11, Q58), so 35% of
+    // $1,800 less the same $600 is $30 — small, but over the $10 the state will
+    // write a cheque for.
+    const shared = {
+      ...modestRent,
+      members: [...modestRent.members, member("housemate", { age: 44 })],
+    };
+    expect(rebate(shared)!.figures!.annual).toBe(3_000);
+
+    // Two children are not sharing adults, so the applicant is credited with
+    // the whole rent and the figure is exactly what it was living alone.
+    const withChildren = {
+      ...modestRent,
+      members: [...modestRent.members, member("child-1", { age: 9 }), member("child-2", { age: 4 })],
+    };
+    expect(rebate(withChildren)!.figures!.annual).toBe(66_000);
+  });
+
+  /**
+   * Two elderly housemates are two applicants, not one household: each files
+   * their own application, each is tested against their own $46,300 limit, and
+   * each receives their own cheque (Q&A booklet Q11). Summing their incomes and
+   * testing that would fail a pair who are each comfortably under it, which is
+   * the household-shaped mistake ADR-0003 exists to prevent.
+   */
+  it("tests each applicant against the income limit separately, and pays each of them separately", () => {
+    const twoSisters = {
+      ...elderlyRenter(),
+      members: [
+        member("self", { age: 70, incomeSources: socialSecurity(250_000) }),
+        member("sister", { age: 72, incomeSources: socialSecurity(250_000) }),
+      ],
+    };
+
+    // $30,000 each, so $60,000 between them — over the limit added together and
+    // under it apiece.
+    const entry = rebate(twoSisters)!;
+    expect(entry.outcome).toBe("likely-eligible");
+    expect(entry.unit).toEqual(["self", "sister"]);
+    // Half the rent each: 35% of $6,000 is $2,100, less 5% of $30,000, is $600
+    // apiece — and two cheques of $600 are $1,200.
+    expect(entry.figures!.annual).toBe(120_000);
+
+    // One of them over the limit: she is still in the unit, because the unit
+    // says who was screened, and she contributes nothing to the figure.
+    const oneOverTheLimit = {
+      ...twoSisters,
+      members: twoSisters.members.map((m) =>
+        m.id === "sister" ? { ...m, incomeSources: socialSecurity(1_000_000) } : m,
+      ),
+    };
+    expect(rebate(oneOverTheLimit)!.unit).toEqual(["self", "sister"]);
+    expect(rebate(oneOverTheLimit)!.figures!.annual).toBe(60_000);
+  });
+
+  /**
+   * The minimum payable is a fact about a cheque, and each applicant gets their
+   * own — so two applicants owed $6 apiece are sent nothing, not $12.
+   */
+  it("applies the minimum payable to each applicant's own cheque, never to the household's total", () => {
+    // 35% of $700 of shared rent is $245, less 5% of $4,800 of income, is $5.
+    const twoSmallGrants = {
+      members: [
+        member("self", { age: 70, incomeSources: socialSecurity(40_000) }),
+        member("sister", { age: 72, incomeSources: socialSecurity(40_000) }),
+      ],
+      monthlyRent: 11_667,
+    };
+
+    expect(rebate(twoSmallGrants)!.outcome).toBe("likely-ineligible");
+    expect(rebate(twoSmallGrants)!.figures).toBeUndefined();
+  });
+
+  it("derives its own unit — the applicant, not the household", () => {
+    expect(rebate(mariaAfterHerMother)!.unit).toEqual(["mother"]);
+    // SNAP's unit on the same household, for contrast: everyone who eats
+    // together, the applicant included (ADR-0003).
+    expect(screen(mariaAfterHerMother, ASOF, 0).programs[0]!.unit).toEqual([
+      "self",
+      "child-1",
+      "child-2",
+      "mother",
+    ]);
+  });
+
+  it("reaches an adult under 65 only when a disability has been recorded, and never asks in order to find out", () => {
+    // Maria is 31 and nobody has said anything about disability. The rebate is
+    // not on her map — and, unlike CEAP and Care 4 Kids, it has put nothing on
+    // the conversation's agenda to go and find out whether it should be. A fact
+    // that would decide something for every adult under 65 is one this Program
+    // reads when it is there and never chases (`types.ts`, `isPregnant`).
+    expect(rebate(mariaBeforeHerMother)).toBeUndefined();
+    expect(screen(mariaBeforeHerMother, ASOF, 0).blockingFacts).toEqual([]);
+
+    // Volunteered, it reaches her at 31: she rents alone, so 35% of her $19,200
+    // of rent is $6,720 against 5% of her $24,864 of qualifying income, which
+    // is over the maximum.
+    const disabled = {
+      ...mariaBeforeHerMother,
+      members: mariaBeforeHerMother.members.map((m) =>
+        m.id === "self" ? { ...m, hasDisability: true } : m,
+      ),
+    };
+    expect(rebate(disabled)!.unit).toEqual(["self"]);
+    expect(rebate(disabled)!.figures!.annual).toBe(70_000);
+  });
+
+  it("is the one Program a household that declines the status question still gets a figure for", () => {
+    const declined = { ...mariaAfterHerMother, immigrationStatus: "declined" as const };
+    const result = screen(declined, ASOF, 1);
+
+    expect(result.programs.filter((program) => program.outcome === "indeterminate").map((p) => p.programId)).toEqual([
+      "snap",
+      "ceap",
+      "husky-a",
+      "care-4-kids",
+    ]);
+    expect(rebate(declined)!.figures!.annual).toBe(70_000);
+    // $700 of rebate plus Lifeline's $111 — a headline built entirely from
+    // entries that never asked (ADR-0004, `docs/ct-program-facts.md` §8).
+    expect(result.headlineAnnualTotal).toBe(81_100);
+  });
+
+  it("asks the applicants for their income, and nobody else in the household", () => {
+    const motherNotAsked = {
+      ...mariaAfterHerMother,
+      members: mariaAfterHerMother.members.map((m) =>
+        m.id === "mother" ? { ...m, incomeSources: undefined } : m,
+      ),
+    };
+    expect(rebate(motherNotAsked)).toBeUndefined();
+    expect(blockingFactIds(motherNotAsked)).toContain("income-sources");
+
+    // Rent gates the outcome here rather than only the figure, because an
+    // applicant under the income limit may still be owed nothing.
+    const { monthlyRent, ...noRent } = mariaAfterHerMother;
+    expect(rebate(noRent)).toBeUndefined();
+    expect(blockingFactIds(noRent)).toContain("rent");
+  });
+
+  it("falls off the map outside the 2026 application window, rather than pricing a grant nobody can claim", () => {
+    expect(rebate(mariaAfterHerMother, "2026-09-30")!.figures!.annual).toBe(70_000);
+    expect(rebate(mariaAfterHerMother, "2026-10-01")).toBeUndefined();
+    expect(rebate(mariaAfterHerMother, "2026-03-31")).toBeUndefined();
+  });
+});
+
+describe("the inference moment: one member, two consequences", () => {
+  /**
+   * ADR-0007's claim, asserted as one comparison rather than two tests.
+   *
+   * Maria's mother moves in. Nothing else about the household changes — same
+   * rent, same heating bill, same wages, same cash — and two separate things
+   * move on the eligibility map:
+   *
+   *  - the renters' rebate appears, scored on the mother alone;
+   *  - SNAP's existing figure changes, because a member aged 60 or over removes
+   *    the excess shelter deduction cap entirely.
+   *
+   * The second is the one no script contains. Both fall out of a member being
+   * appended to `members`, and the test is deliberately written as a delta
+   * between two whole `ScreeningResult`s, because that delta is what the panel
+   * renders and what the demo is.
+   */
+  it("adds the renters' rebate and moves SNAP's figure from the same new member", () => {
+    const before = screen(mariaBeforeHerMother, ASOF, 1);
+    const after = screen(mariaAfterHerMother, ASOF, 2);
+
+    const programIdsOf = (result: ScreeningResult) => result.programs.map((program) => program.programId);
+    const figureOf = (result: ScreeningResult, programId: string) =>
+      result.programs.find((program) => program.programId === programId)?.figures;
+
+    // Consequence one: a Program that was not on the map is on it, with its own
+    // unit and its own figure.
+    expect(programIdsOf(before)).not.toContain("renters-rebate");
+    expect(programIdsOf(after)).toContain("renters-rebate");
+    expect(figureOf(after, "renters-rebate")).toEqual({
+      annual: 70_000,
+      basis: "2026 program year (2025 rent and income)",
+    });
+
+    // Consequence two: SNAP's figure moved, and it is the shelter cap coming
+    // off that moved it. $573 → $693 a month.
+    expect(figureOf(before, "snap")!.monthly).toBe(57_300);
+    expect(figureOf(after, "snap")!.monthly).toBe(69_300);
+
+    expect(after.headlineAnnualTotal - before.headlineAnnualTotal).toBe(214_000);
+
+    // And both consequences read off the single result, which is what the
+    // panel is handed and what the room is looking at: one map carrying SNAP's
+    // new figure and a Program that was not there a moment ago.
+    expect(
+      after.programs.map((program) => [program.programId, program.figures?.annual]),
+    ).toEqual([
+      ["snap", 831_600],
+      ["ceap", 77_000],
+      ["husky-a", undefined],
+      ["care-4-kids", undefined],
+      ["renters-rebate", 70_000],
+    ]);
+  });
+
+  /**
+   * The counterfactual that isolates the cap from everything else the mother's
+   * arrival changes. Same four-person household, same income, same rent — she
+   * is 59 rather than 71.
+   *
+   * SNAP's allotment falls from $693 to $501 because the cap is back on — $192
+   * a month, which is what the second consequence is actually worth to this
+   * household. The renters' rebate is gone too, and at a *different* threshold:
+   * 60 is SNAP's line under
+   * 7 CFR 271.2 and 65 is the rebate's under OPM's rules, so a household can
+   * cross one without crossing the other. At 59 it has crossed neither.
+   */
+  it("puts the shelter cap back, and takes the rebate away, when the same member is 59", () => {
+    const at59 = {
+      ...mariaAfterHerMother,
+      members: mariaAfterHerMother.members.map((m) => (m.id === "mother" ? { ...m, age: 59 } : m)),
+    };
+    const at64 = {
+      ...mariaAfterHerMother,
+      members: mariaAfterHerMother.members.map((m) => (m.id === "mother" ? { ...m, age: 64 } : m)),
+    };
+
+    const snapAt = (profile: HouseholdProfile) =>
+      screen(profile, ASOF, 0).programs.find((program) => program.programId === "snap")!.figures!.monthly;
+    const hasRebate = (profile: HouseholdProfile) =>
+      screen(profile, ASOF, 0).programs.some((program) => program.programId === "renters-rebate");
+
+    expect(snapAt(at59)).toBe(50_100);
+    expect(hasRebate(at59)).toBe(false);
+
+    // 64 is over SNAP's line and under the rebate's: the cap is off, and there
+    // is still no rebate.
+    expect(snapAt(at64)).toBe(69_300);
+    expect(hasRebate(at64)).toBe(false);
+  });
+
+  /**
+   * The cap comes off for a disabled member too, at any age (7 CFR 271.2), and
+   * `hasDisability` being unrecorded is read as *not* disabled — which
+   * understates the allotment rather than overstating it, and is the deferral
+   * `containsElderlyOrDisabledMember` in `programs/snap.ts` names.
+   */
+  it("removes the shelter cap for a recorded disability at any age, and applies it while nobody has said", () => {
+    const disabled = {
+      ...mariaBeforeHerMother,
+      members: mariaBeforeHerMother.members.map((m) =>
+        m.id === "self" ? { ...m, hasDisability: true } : m,
+      ),
+    };
+
+    expect(screen(mariaBeforeHerMother, ASOF, 0).programs[0]!.figures!.monthly).toBe(57_300);
+    // Uncapped, Maria's excess shelter ($1,851.70) exceeds her adjusted income
+    // ($1,448.60) outright, so net income is zero and the allotment is the full
+    // maximum for a unit of three — the "drives net income to zero and the
+    // allotment to the household maximum" case ADR-0007 names, reached here
+    // through a disability rather than through age.
+    expect(screen(disabled, ASOF, 0).programs[0]!.figures!.monthly).toBe(78_500);
+  });
+
+  /**
+   * The cap belongs to the SNAP Program unit, not to the household — 7 CFR
+   * 273.9(d)(6)(ii) says "if the *household* does not contain", and SNAP's
+   * household is the people who purchase and prepare food together (ADR-0003).
+   * A grandmother who eats separately is outside it, and the cap stays on.
+   */
+  it("reads the elderly member off SNAP's own unit, not off the Household profile", () => {
+    const eatsSeparately = {
+      ...mariaAfterHerMother,
+      members: mariaAfterHerMother.members.map((m) =>
+        m.id === "mother" ? { ...m, sharesFoodPurchaseAndPreparation: false } : m,
+      ),
+    };
+
+    const result = screen(eatsSeparately, ASOF, 0);
+    const snap = result.programs.find((program) => program.programId === "snap")!;
+
+    expect(snap.unit).toEqual(["self", "child-1", "child-2"]);
+    expect(snap.figures!.monthly).toBe(57_300);
+    // The rebate does not care where anyone buys their food, so the mother is
+    // still its applicant.
+    expect(result.programs.find((program) => program.programId === "renters-rebate")!.unit).toEqual([
+      "mother",
+    ]);
   });
 });
