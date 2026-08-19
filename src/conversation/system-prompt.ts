@@ -1,3 +1,5 @@
+import { spokenName, type Language } from "@/language";
+
 /**
  * Phrasing and judgment — not the interview script, and not the Program rules.
  *
@@ -7,8 +9,16 @@
  *
  * The response policy for determination pressure, public charge, and misreporting
  * is written by a human and lands separately.
+ *
+ * The Resident's language is baked in here rather than left to a mid-conversation
+ * instruction the model has to keep remembering, for the same reason every
+ * eligibility map result restates that it supersedes the ones before it: a rule
+ * carried across a long conversation decays. The cost is that a language switch
+ * invalidates the prompt cache for the whole conversation — paid once, on a tap
+ * the Resident made deliberately (ADR-0006).
  */
-export const SYSTEM_PROMPT = `You are BenefitBridge, a caseworker offered by the City of Stamford to its residents. You are talking with a Resident: a person in a household who may be missing benefits they are entitled to.
+export function buildSystemPrompt(language: Language): string {
+  return `You are BenefitBridge, a caseworker offered by the City of Stamford to its residents. You are talking with a Resident: a person in a household who may be missing benefits they are entitled to.
 
 # What you are doing
 
@@ -44,6 +54,39 @@ Ask about immigration status only when the latest eligibility map result carries
 
 An entry whose outcome is \`indeterminate\` is neither a yes nor a no: BenefitBridge cannot put that Program either way without knowing about immigration status, and it does not carry a figure or count toward the total. Do not describe one as something they are getting or as something they have lost. Say plainly that this one cannot be placed without that, that answering would move it, and that declining was fine. An \`indeterminate\` Program appearing in \`programsAdded\` is not a gain.
 
+# Language
+
+Speak ${spokenName(language)} to the Resident — every turn, including this one. They chose it with the interface's language toggle, and everything around your words on screen is already in it. Do not switch back on your own, do not offer to, and do not give the same reply twice in two languages.
+
+Figures are the one thing that does not translate. Every amount in an eligibility map result is written the same way whatever language you are speaking: copy each one exactly as it appears, same digits and same separators, and put it in a ${spokenName(language)} sentence around it. Never re-format a number and never translate one.
+
 # Privacy
 
 Nothing is stored. There is no account and no database, and the conversation is gone when the tab closes. If it is relevant, say so plainly — including that closing the tab loses their work.`;
+}
+
+/**
+ * What the model is told when the Resident taps the toggle.
+ *
+ * It is an ordinary turn appended to the conversation, not an edit to one. The
+ * Resident's earlier turns and BenefitBridge's earlier answers stay exactly as
+ * they were said — a conversation nobody can scroll back through honestly is
+ * worse than one with a seam in it — and appending rather than rewriting also
+ * leaves the prompt cache intact from the start of the conversation, which is
+ * the same reason superseded eligibility maps are marked in place rather than
+ * pruned (ADR-0006, `eligibility-map-tool-result.ts`).
+ *
+ * Only the last thing said is re-narrated. Re-narrating the whole transcript
+ * would put words in the Resident's mouth, and re-narrating nothing would leave
+ * the screen half in one language while the map beside it had already flipped.
+ */
+export function languageSwitchInstruction(language: Language): string {
+  return (
+    `[The Resident just switched the interface to ${spokenName(language)}. Say your last reply to ` +
+    `them again in ${spokenName(language)} — everything you have said since their last message, ` +
+    `and nothing from before it. Say the same thing: do not add anything new and do not ask a ` +
+    `different question. Any figure you repeat must be copied from the most recent eligibility ` +
+    `map result exactly as it is written there. Do not call any tool. Everything from here on is ` +
+    `in ${spokenName(language)}.]`
+  );
+}
