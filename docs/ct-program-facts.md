@@ -306,7 +306,63 @@ Investment income limit: **$11,950 or less.**
 
 Sources: https://www.irs.gov/credits-deductions/individuals/earned-income-tax-credit/earned-income-and-earned-income-tax-credit-eitc-tables · underlying inflation adjustments Rev. Proc. 2024-40 §2.06, https://www.irs.gov/pub/irs-drop/rp-24-40.pdf
 
-**UNVERIFIED:** the exact phase-in rates and phase-out *start* thresholds by filing status. Only the maximum credit and the completed-phase-out AGI ceilings were confirmed from primary source. Do not compute a mid-range EITC estimate without pulling Rev. Proc. 2024-40 §2.06 or Pub. 596 in full: https://www.irs.gov/pub/irs-pdf/p596.pdf
+### Federal EITC phase-in and phase-out parameters, TY2025 — **CONFIRMED (issue #9)**
+
+**Research date: 2026-08-19.** Pulled directly from Rev. Proc. 2024-40 §2.06(1), p.9 (the table reproduced below is transcribed verbatim from that page — not the IRS's public EITC-tables summary page, which only carries the max-credit/ceiling row already in the table above):
+
+| Item | 0 children | 1 child | 2 children | 3+ children |
+| --- | --- | --- | --- | --- |
+| Earned income amount (phase-in ceiling) | $8,490 | $12,730 | $17,880 | $17,880 |
+| Maximum credit | $649 | $4,328 | $7,152 | $8,046 |
+| Threshold phaseout amount — all filing statuses other than MFJ | $10,620 | $23,350 | $23,350 | $23,350 |
+| Completed phaseout amount — all filing statuses other than MFJ | $19,104 | $50,434 | $57,310 | $61,555 |
+| Threshold phaseout amount — married filing jointly | $17,730 | $30,470 | $30,470 | $30,470 |
+| Completed phaseout amount — married filing jointly | $26,214 | $57,554 | $64,430 | $68,675 |
+
+Rev. Proc. 2024-40 does not separately restate the phase-in and phase-out *percentages* (those are the statutory rates under § 32(b)(1), unchanged by the annual inflation adjustment) — but they are recoverable by exact division of the confirmed table above, since by construction `phase-in rate × earned income amount = maximum credit` and `maximum credit − phase-out rate × (completed phaseout − threshold phaseout) = 0`:
+
+| Qualifying children | Phase-in rate | Phase-out rate |
+| --- | --- | --- |
+| 0 | $649 / $8,490 = **7.64%** (rounds from 7.6443%) | $649 / ($19,104 − $10,620) = **7.65%** (rounds from 7.6497%) |
+| 1 | $4,328 / $12,730 = **34.00%** (rounds from 33.9984%) | $4,328 / ($50,434 − $23,350) = **15.98%** |
+| 2 | $7,152 / $17,880 = **40.00%** | $7,152 / ($57,310 − $23,350) = **21.06%** (rounds from 21.0601%) |
+| 3+ | $8,046 / $17,880 = **45.00%** | $8,046 / ($61,555 − $23,350) = **21.06%** (rounds from 21.0601%) |
+
+The statutory rates under § 32(b)(1)(A)–(B) are a flat 7.65% / 34% / 40% / 45% phase-in and 7.65% / 15.98% / 21.06% / 21.06% phase-out — unchanged by the annual inflation adjustment. Dividing back through the *rounded* dollar amounts IRS publishes each year reproduces those rates almost exactly, with one visible exception: the 0-children phase-in cell divides out to 7.64%, not the statutory 7.65%, because $8,490 itself is rounded to the nearest $10 under Rev. Proc. 2024-40's own rounding rule (§ 1(f)(6)) — a $6 pull on an $8,490 base is enough to cross the 7.645% rounding boundary. This is expected rounding noise in the published dollar figures, not an error in the statutory rate, and it is why `screen()` should hold the statutory percentages as the authoritative constant and use the dollar amounts (not a back-divided percentage) as the source of truth for the ceiling/threshold boundaries. Cross-checked against the published EIC Table below — the table's midpoint-of-bracket method is consistent with the statutory rates (see Maria's worked example).
+
+**Full cross-tab by qualifying-child count and filing status**, since issue #9's deliverable asks for all four parameters "by number of qualifying children and by filing status" — the phase-in rate, phase-in ceiling, and phase-out rate are statutorily identical across filing status (only the two threshold/completed amounts move for MFJ), so the repetition below is real, not an omission:
+
+| Qualifying children | Filing status | Phase-in rate | Phase-in ceiling | Phase-out start threshold | Phase-out rate |
+| --- | --- | --- | --- | --- | --- |
+| 0 | Non-MFJ | 7.64% | $8,490 | $10,620 | 7.65% |
+| 0 | MFJ | 7.64% | $8,490 | $17,730 | 7.65% |
+| 1 | Non-MFJ | 34.00% | $12,730 | $23,350 | 15.98% |
+| 1 | MFJ | 34.00% | $12,730 | $30,470 | 15.98% |
+| 2 | Non-MFJ | 40.00% | $17,880 | $23,350 | 21.06% |
+| 2 | MFJ | 40.00% | $17,880 | $30,470 | 21.06% |
+| 3+ | Non-MFJ | 45.00% | $17,880 | $23,350 | 21.06% |
+| 3+ | MFJ | 45.00% | $17,880 | $30,470 | 21.06% |
+
+**Mechanism for `screen()`:** for earned income (or AGI, if greater — the taxpayer must compute both and use the smaller resulting credit when they differ) `x`:
+- If `x < earned income amount`: credit = phase-in rate × x.
+- If `earned income amount ≤ x ≤ threshold phaseout amount`: credit = maximum credit.
+- If `x > threshold phaseout amount` (up to completed phaseout amount, above which credit is $0): credit = maximum credit − phase-out rate × (x − threshold phaseout amount).
+
+The IRS's own EIC Table (Pub. 596, pp. 27–41) does not use the exact dollar amount — it buckets earned income (and AGI) into $50 ranges and computes the credit off the **midpoint** of each range, then rounds to the nearest dollar. This produces a slightly lower credit than plugging the exact income into the formula above (see Maria's example) and is the version that appears on a real return; use it, not the raw formula, whenever a table lookup is feasible.
+
+Source: Rev. Proc. 2024-40 §2.06(1) — https://www.irs.gov/pub/irs-drop/rp-24-40.pdf, p.9 · cross-check via the published table, Pub. 596 (2025) pp. 27–41 — https://www.irs.gov/pub/irs-pdf/p596.pdf
+
+### Maria's actual EITC figure — issue #9 deliverable
+
+**Household:** single parent, two qualifying children, head of household, ~$25,000 earned income (partly cash), no other income — the base "Maria" demo persona (`docs/market-research.md` §"Demo persona"; ages 4 and 9 and the "before her mother" framing per issue #9 and issue #1's fixture case 1, "Maria, before her mother").
+
+**Federal EITC:** Maria's income of $25,000 falls in the phase-out region (above the $17,880 ceiling, above the $23,350 non-joint threshold, below the $57,310 non-joint completed-phaseout ceiling for 2 children). Looked up directly from the Pub. 596 (2025) EIC Table, "At least $25,000 but less than $25,050," Single/HoH/QSS column, 2 children: **$6,799**. (Table method: credit is computed off the bracket midpoint, $25,025 → $7,152 − 21.06% × ($25,025 − $23,350) = $7,152 − $352.76 = $6,799.24 → $6,799. The naive formula plugging in the exact $25,000 gives $6,804.51 — close, but the table value is the one that would actually appear on Maria's return.)
+
+**Connecticut EITC:** 40% of the federal credit, plus $250 for having a qualifying child (see "Connecticut EITC — tax year 2025" below): 0.40 × $6,799 = $2,719.60, + $250 = **$2,969.60** (rounds to $2,970 on a whole-dollar return).
+
+**Combined federal + CT EITC: $6,799 + $2,970 = $9,769.**
+
+This retires the `docs/market-research.md` "~$3,000" figure (§9 below) — the real number is roughly **3.3× larger**, driven almost entirely by the federal credit alone ($6,799), which the market-research draft had never separated from the CT add-on.
 
 ### Connecticut EITC — tax year 2025
 
@@ -328,7 +384,7 @@ Maximum combined federal + CT credit, TY2025 (CT portion computed as 40% of fede
 
 The CT column is *computed* by applying the verified 40% rate and $250 add-on to the verified federal maximums; the DRS page carries a "Max State EITC @40% of Federal" table that agrees with the method.
 
-> Product implication: the market-research doc's "~$3,000 of unclaimed EITC" for the Maria persona (2 kids, $25k) is **materially low** — the two-child federal maximum alone is $7,152, and CT adds 40% plus $250 on top. See §7 for the flag.
+> Product implication: the market-research doc's "~$3,000 of unclaimed EITC" for the Maria persona (2 kids, $25k) is **confirmed materially low, by roughly 3.3×** — her actual computed combined federal + CT figure is **$9,769** (see Maria's worked example above), not a mid-range approximation off the two-child federal maximum. See §9 ("Review of `docs/market-research.md`") for the flag.
 
 ---
 
@@ -503,7 +559,7 @@ Reviewed against the verified figures above. Ordered by how much damage each doe
 
 | # | Location | Claim | Verdict |
 | --- | --- | --- | --- |
-| 1 | §7 beat 4, §8 "Research & insight" | "~$3,000 of unclaimed EITC" for Maria (2 kids, ~$25k, single) | **UNDERSTATED, roughly 3×.** TY2025 federal max for 2 children is **$7,152**; CT adds 40% ($2,860.80) plus **$250**. The pitch is leaving its single most impressive number on the table. Recompute Maria's actual EITC before the 19th (needs the phase-out math — see §5 UNVERIFIED note) and quote the real figure. |
+| 1 | §7 beat 4, §8 "Research & insight" | "~$3,000 of unclaimed EITC" for Maria (2 kids, ~$25k, single) | **UNDERSTATED, roughly 3.3×, now computed (issue #9).** Maria's real combined federal + CT figure is **$9,769** ($6,799 federal, from the actual Pub. 596 EIC Table lookup at her $25,000 income — not the two-child maximum of $7,152, since her income sits in the phase-out range — plus $2,970 CT). See §5 for the full worked computation. Quote $9,769, not $3,000 or the federal maximum. |
 | 2 | §2 persona, §3 eligibility map, §7 beat 3 | Care 4 Kids listed as a benefit with a dollar value, no qualifier | **MISLEADING.** Care 4 Kids has had an enrollment list since March 2023; as of **Aug 4, 2026** it is inviting applications received **Sept 15, 2025** — a **~8-month** wait. Showing it as claimable money invites a judge to call it. Relabel: "waitlist — apply now, ~8-month queue." |
 | 3 | §11 Data Specialist row | "Verify current CT program names + rough thresholds" — SNAP thresholds unstated | **CT-SPECIFIC TRAP.** CT uses **BBCE at 200% FPL** ($4,442/mo for HH3), not the federal 130% ($2,888). A screener built on the federal number wrongly rejects a large share of Stamford applicants. This is also a *great* pitch point — "the national screeners get Connecticut wrong." |
 | 4 | Second half, "Step 2: The Screener Demo" | "instantly matching them for CEAP energy assistance ($295–$645)" | **CORRECT for the 2025-26 season, expiring in 6 weeks.** The proposed FFY2027 matrix (season opens Oct 1 2026) is **$355–$705** basic, crisis $430. Since the event is Aug 19 2026, either cite 2025-26 explicitly or use the FFY2027 proposed range with the "proposed" caveat. |
