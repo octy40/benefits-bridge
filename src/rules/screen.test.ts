@@ -3,6 +3,8 @@ import {
   ceapCategoricalHousehold,
   ctBbceBoundaryHousehold,
   declinedStatusHousehold,
+  deniseAlone,
+  deniseWithHerSon,
   mariaBeforeHerMother,
 } from "./fixtures";
 import { screen } from "./screen";
@@ -58,13 +60,17 @@ describe("screen", () => {
       keychain: [],
       headlineAnnualTotal: 0,
       // Nothing is known, so every fact each Program needs is missing. Ranked
-      // by how many Programs each blocks: CEAP has no food-sharing concept of
-      // its own (its unit is the whole household), so `household-members` and
-      // `income-sources` each block both Programs and outrank `food-sharing`,
-      // which blocks only SNAP — exactly ADR-0002's promise that a new
-      // Program starts pulling on the conversation with no prompt change.
+      // by how many Programs each blocks: `household-members` blocks all
+      // five — even HUSKY A/D and Care 4 Kids, which do not yet know whether
+      // this household has anyone they cover — and outranks `income-sources`,
+      // which blocks only SNAP and CEAP: HUSKY A/D and Care 4 Kids do not
+      // apply to every household the way CEAP does, so they wait for a
+      // member's age (or pregnancy, or a working parent) before asking for
+      // income on their own account at all — exactly ADR-0002's promise that
+      // a new Program starts pulling on the conversation with no prompt
+      // change, without forcing every Program to ask for everything.
       blockingFacts: [
-        { factId: "household-members", blocks: ["snap", "ceap"] },
+        { factId: "household-members", blocks: ["snap", "ceap", "husky-a", "husky-d", "care-4-kids"] },
         { factId: "income-sources", blocks: ["snap", "ceap"] },
         { factId: "food-sharing", blocks: ["snap"] },
       ],
@@ -122,6 +128,30 @@ describe("SNAP under Connecticut's broad-based categorical eligibility", () => {
             annual: 59_500,
             basis: "2025-26 heating season (FFY2026 LIHEAP-CEAP), October 2025 – September 2026",
           },
+          blockedBy: [],
+        },
+        // HUSKY A's 138% parent/caretaker line for a household of three is
+        // $3,142/month; this household's ~$3,606.68 clears it, so the self
+        // does not join the unit. Its own 201% children's line is
+        // $4,577/month — well clear — so both children do, and coverage is
+        // never a figure regardless.
+        {
+          programId: "husky-a",
+          outcome: "likely-eligible",
+          unit: ["child-1", "child-2"],
+          noFigureReason: "coverage-not-cash",
+          blockedBy: [],
+        },
+        // Care 4 Kids' income ceiling (60% SMI, $77,157 for three) clears by a
+        // wide margin, both children are under 13, and the self has wages —
+        // a working parent. Waitlisted, not a figure, and neither child
+        // contributes to the headline.
+        {
+          programId: "care-4-kids",
+          outcome: "likely-eligible",
+          unit: ["child-1", "child-2"],
+          noFigureReason: "waitlisted",
+          waitlist: { typicalWaitMonths: 8, invitingApplicationsReceivedBy: "2025-09-15" },
           blockedBy: [],
         },
       ],
@@ -369,18 +399,42 @@ describe("the SNAP monthly allotment", () => {
           },
           blockedBy: [],
         },
+        // $2,072/month is under HUSKY A's 138% parent line for a household of
+        // three ($3,142), so Maria joins the unit alongside her children —
+        // unlike the CT BBCE boundary household above her, whose income
+        // clears the parent line but not the children's.
+        {
+          programId: "husky-a",
+          outcome: "likely-eligible",
+          unit: ["self", "child-1", "child-2"],
+          noFigureReason: "coverage-not-cash",
+          blockedBy: [],
+        },
+        // Both children are under 13, Maria's wages make her a working
+        // parent, and $24,864/year is well under the 60% SMI ceiling
+        // ($77,157 for three) — waitlisted, never a figure.
+        {
+          programId: "care-4-kids",
+          outcome: "likely-eligible",
+          unit: ["child-1", "child-2"],
+          noFigureReason: "waitlisted",
+          waitlist: { typicalWaitMonths: 8, invitingApplicationsReceivedBy: "2025-09-15" },
+          blockedBy: [],
+        },
       ],
       keychain: [],
       // The first tier-1 figures, and therefore the first headline that is not
-      // zero. Every derived form is here so the model never divides (ADR-0010).
+      // zero. HUSKY A and Care 4 Kids never carry a figure, so neither moves
+      // it — every derived form here is still what SNAP and CEAP contribute
+      // (ADR-0010).
       headlineAnnualTotal: 764_600,
       blockingFacts: [],
       // Nothing is left to ask, so the one optional question opens — and only
       // now, so it never competes with the ranked list (ADR-0002, ADR-0004).
-      // CEAP carries the same status shape as SNAP (`docs/ct-program-facts.md`
-      // §8), so it joins the question the moment it too has nothing left on
-      // the Blocking facts list.
-      statusQuestion: { blocks: ["snap", "ceap"] },
+      // CEAP, HUSKY A and Care 4 Kids all carry the same status shape as SNAP
+      // (`docs/ct-program-facts.md` §8), so each joins the question the
+      // moment it too has nothing left on the Blocking facts list.
+      statusQuestion: { blocks: ["snap", "ceap", "husky-a", "care-4-kids"] },
     });
   });
 
@@ -560,13 +614,28 @@ describe("Indeterminate: the optional immigration status question", () => {
           unit: ["self", "child-1", "child-2"],
           blockedBy: [],
         },
-        // CEAP carries the same status shape as SNAP (`docs/ct-program-facts.md`
-        // §8) and passes through the same `statusDependent` wrap, so a decline
-        // lands it on Indeterminate too.
+        // CEAP, HUSKY A and Care 4 Kids all carry the same status shape as
+        // SNAP (`docs/ct-program-facts.md` §8) and pass through the same
+        // `statusDependent` wrap, so a decline lands all three on
+        // Indeterminate too. Care 4 Kids' unit is only the children — HUSKY
+        // A's own unit here still reflects Maria too, since she independently
+        // clears its 138% parent line.
         {
           programId: "ceap",
           outcome: "indeterminate",
           unit: ["self", "child-1", "child-2"],
+          blockedBy: [],
+        },
+        {
+          programId: "husky-a",
+          outcome: "indeterminate",
+          unit: ["self", "child-1", "child-2"],
+          blockedBy: [],
+        },
+        {
+          programId: "care-4-kids",
+          outcome: "indeterminate",
+          unit: ["child-1", "child-2"],
           blockedBy: [],
         },
       ],
@@ -576,12 +645,13 @@ describe("Indeterminate: the optional immigration status question", () => {
       //
       // What this cannot assert, and must not fake: the ticket asks that
       // status-blind Programs still be scored and the headline still be
-      // produced from them. SNAP and CEAP are the only implemented Programs
-      // and both are status-dependent, so $0 is the correct headline here.
-      // The CT Elderly/Disabled Renters' Rebate is the only genuinely
-      // status-blind Program on the list (`docs/ct-program-facts.md` §8); it
-      // is issue #17, gated on issue #10, and when it lands this assertion
-      // should carry a non-zero headline alongside two Indeterminate entries.
+      // produced from them. SNAP, CEAP, HUSKY A and Care 4 Kids are the only
+      // implemented Programs and all four are status-dependent, so $0 is the
+      // correct headline here. The CT Elderly/Disabled Renters' Rebate is the
+      // only genuinely status-blind Program on the list
+      // (`docs/ct-program-facts.md` §8); it is issue #17, gated on issue #10,
+      // and when it lands this assertion should carry a non-zero headline
+      // alongside these Indeterminate entries.
       headlineAnnualTotal: 0,
       // A declined household is asked for nothing further. Rent and utilities
       // would only price an allotment BenefitBridge cannot say is owed.
@@ -609,6 +679,8 @@ describe("Indeterminate: the optional immigration status question", () => {
       programs: [
         { programId: "snap", outcome: "indeterminate", unit: ["self", "child-1", "child-2"], blockedBy: [] },
         { programId: "ceap", outcome: "indeterminate", unit: ["self", "child-1", "child-2"], blockedBy: [] },
+        { programId: "husky-a", outcome: "indeterminate", unit: ["self", "child-1", "child-2"], blockedBy: [] },
+        { programId: "care-4-kids", outcome: "indeterminate", unit: ["child-1", "child-2"], blockedBy: [] },
       ],
       keychain: [],
       headlineAnnualTotal: 0,
@@ -644,6 +716,21 @@ describe("Indeterminate: the optional immigration status question", () => {
           },
           blockedBy: [],
         },
+        {
+          programId: "husky-a",
+          outcome: "likely-eligible",
+          unit: ["self", "child-1", "child-2"],
+          noFigureReason: "coverage-not-cash",
+          blockedBy: [],
+        },
+        {
+          programId: "care-4-kids",
+          outcome: "likely-eligible",
+          unit: ["child-1", "child-2"],
+          noFigureReason: "waitlisted",
+          waitlist: { typicalWaitMonths: 8, invitingApplicationsReceivedBy: "2025-09-15" },
+          blockedBy: [],
+        },
       ],
       keychain: [],
       headlineAnnualTotal: 764_600,
@@ -663,7 +750,9 @@ describe("Indeterminate: the optional immigration status question", () => {
     ]);
     expect(screen(midConversation, ASOF, 0).statusQuestion).toBeUndefined();
 
-    expect(screen(mariaBeforeHerMother, ASOF, 0).statusQuestion).toEqual({ blocks: ["snap", "ceap"] });
+    expect(screen(mariaBeforeHerMother, ASOF, 0).statusQuestion).toEqual({
+      blocks: ["snap", "ceap", "husky-a", "care-4-kids"],
+    });
   });
 
   it("closes the question once any answer is recorded, a decline included", () => {
@@ -725,9 +814,13 @@ describe("effective-dated figures", () => {
     // when this table was written. A Program with no figures in force is one
     // BenefitBridge cannot screen — not one it screens with last year's
     // numbers. CEAP is the demonstration that this is genuinely per-Program:
-    // its own FFY2027 table (proposed) already covers 2026-10-01, so the map
-    // is CEAP alone rather than empty (CONTEXT.md, *Effective-dated figures*).
-    expect(programIds(ctBbceBoundaryHousehold, "2026-10-01")).toEqual(["ceap"]);
+    // its own FFY2027 table (proposed) already covers 2026-10-01, and HUSKY
+    // A's own table has no confirmed end date (`programs/husky.ts`) so it is
+    // still in force too — the map is CEAP and HUSKY A rather than empty
+    // (CONTEXT.md, *Effective-dated figures*). Care 4 Kids' table ends with
+    // CEAP's FFY2026 season and has no FFY2027 successor sourced, so it drops
+    // off here rather than guessing one.
+    expect(programIds(ctBbceBoundaryHousehold, "2026-10-01")).toEqual(["ceap", "husky-a"]);
     // Before either table starts, neither Program is on the map.
     expect(programIds(ctBbceBoundaryHousehold, "2025-09-30")).toEqual([]);
   });
@@ -738,10 +831,12 @@ describe("effective-dated figures", () => {
     // them, and the headline goes with it.
     expect(screen(mariaBeforeHerMother, "2026-09-30", 0).programs[0]!.figures!.monthly).toBe(57_300);
 
-    // CEAP's FFY2027 table has already begun (proposed) where SNAP's FY2026
-    // one just ended, so the map holds CEAP's figure rather than nothing.
+    // CEAP's FFY2027 table has already begun (proposed) and HUSKY A's table
+    // is still open, where SNAP's FY2026 one just ended and Care 4 Kids'
+    // FFY2026 window has closed — the map holds CEAP's figure and HUSKY A's
+    // coverage rather than nothing.
     const dayAfter = screen(mariaBeforeHerMother, "2026-10-01", 0);
-    expect(programIds(mariaBeforeHerMother, "2026-10-01")).toEqual(["ceap"]);
+    expect(programIds(mariaBeforeHerMother, "2026-10-01")).toEqual(["ceap", "husky-a"]);
     expect(dayAfter.headlineAnnualTotal).toBe(84_500);
 
     expect(screen(mariaBeforeHerMother, "2025-09-30", 0).programs).toEqual([]);
@@ -925,5 +1020,263 @@ describe("CEAP energy assistance", () => {
     // does, because CEAP's figure is the only thing in it and it is proposed.
     expect(screen(mariaBeforeHerMother, "2026-09-30", 0).headlineAnnualTotalProvisional).toBeUndefined();
     expect(screen(mariaBeforeHerMother, "2026-10-01", 0).headlineAnnualTotalProvisional).toBe(true);
+  });
+});
+
+describe("HUSKY A and HUSKY D: coverage, never cash", () => {
+  it("routes a childless adult to HUSKY D and a parent to HUSKY A at the identical 138% line", () => {
+    // Same $1,500/month, same 138% FPL test, different Programs — the
+    // ticket's headline claim: routing turns on household composition, not
+    // on income (`docs/ct-program-facts.md` §2). Denise's income also clears
+    // SNAP's and CEAP's own limits, so both fixtures carry those too; this
+    // test only extracts the HUSKY entries.
+    const alone = screen(deniseAlone, ASOF, 0);
+    expect(alone.programs.map((program) => program.programId)).not.toContain("husky-a");
+    expect(alone.programs.find((program) => program.programId === "husky-d")).toEqual({
+      programId: "husky-d",
+      outcome: "likely-eligible",
+      unit: ["denise"],
+      noFigureReason: "coverage-not-cash",
+      blockedBy: [],
+    });
+
+    const withSon = screen(deniseWithHerSon, ASOF, 0);
+    expect(withSon.programs.map((program) => program.programId)).not.toContain("husky-d");
+    // Denise's own income clears the 138% parent line and her son separately
+    // clears the 201% children's line, so both land in the unit.
+    expect(withSon.programs.find((program) => program.programId === "husky-a")).toEqual({
+      programId: "husky-a",
+      outcome: "likely-eligible",
+      unit: ["denise", "son"],
+      noFigureReason: "coverage-not-cash",
+      blockedBy: [],
+    });
+  });
+
+  it("never carries a figure, and never contributes to the headline", () => {
+    const result = screen(deniseWithHerSon, ASOF, 0);
+    const huskyA = result.programs.find((program) => program.programId === "husky-a")!;
+
+    expect(huskyA.figures).toBeUndefined();
+    expect(huskyA.noFigureReason).toBe("coverage-not-cash");
+    expect(result.headlineAnnualTotal).toBe(0);
+  });
+
+  it("clears a dependent child at 201% FPL even where the parent misses 138%", () => {
+    // A household of two at $3,000/month: over HUSKY A's parent line for two
+    // ($2,489) but under its children's line ($3,625). The self is left out
+    // of the unit; the child is not.
+    const overParentLine: HouseholdProfile = {
+      members: [
+        member("self", { age: 32, incomeSources: [{ type: "wages", amount: 300_000, period: "monthly" }] }),
+        member("child", { age: 6 }),
+      ],
+    };
+
+    const huskyA = screen(overParentLine, ASOF, 0).programs.find((program) => program.programId === "husky-a")!;
+    expect(huskyA.outcome).toBe("likely-eligible");
+    expect(huskyA.unit).toEqual(["child"]);
+  });
+
+  it("adds a pregnant member at 263% FPL, but only when pregnancy is volunteered", () => {
+    // $2,500/month, alone: over HUSKY D's 138% line ($1,836) so HUSKY D is
+    // likely-ineligible, and — with nobody pregnant on record — no dependent
+    // child or pregnancy route exists for HUSKY A to test at all.
+    const maybeExpecting: HouseholdProfile = {
+      members: [member("self", { age: 25, incomeSources: [{ type: "wages", amount: 250_000, period: "monthly" }] })],
+    };
+
+    const unasked = screen(maybeExpecting, ASOF, 0);
+    expect(unasked.programs.map((program) => program.programId)).not.toContain("husky-a");
+    expect(unasked.programs.find((program) => program.programId === "husky-d")!.outcome).toBe(
+      "likely-ineligible",
+    );
+    // Never a Blocking fact: nobody is asked to unlock this. Unlike
+    // `disability`, pregnancy is not even a `FactId` (`types.ts`) — there is
+    // no ranked-list entry for it to appear on at all. What is left is SNAP's
+    // and CEAP's own agenda, untouched by HUSKY A's absence.
+    expect(unasked.blockingFacts).toEqual([
+      { factId: "rent", blocks: ["snap", "ceap"] },
+      { factId: "utility-costs", blocks: ["snap"] },
+      { factId: "disability", blocks: ["ceap"] },
+    ]);
+
+    // The same household, with pregnancy recorded because the Resident
+    // volunteered it — $2,500 clears HUSKY A's 263% pregnancy line for one
+    // ($3,498), so she joins HUSKY A's unit despite failing HUSKY D's.
+    const recorded: HouseholdProfile = {
+      members: [{ ...maybeExpecting.members[0]!, isPregnant: true }],
+    };
+
+    const result = screen(recorded, ASOF, 0);
+    const huskyA = result.programs.find((program) => program.programId === "husky-a")!;
+    expect(huskyA.outcome).toBe("likely-eligible");
+    expect(huskyA.unit).toEqual(["self"]);
+    expect(huskyA.noFigureReason).toBe("coverage-not-cash");
+  });
+
+  it("does not screen anyone whose age is unknown", () => {
+    // Every SNAP-focused fixture in this file that never states an age is
+    // proof of this by construction: HUSKY A/D never appear for them. Stated
+    // directly here too, for a household that otherwise looks HUSKY-shaped.
+    const agesUnknown: HouseholdProfile = {
+      members: [
+        member("self", { incomeSources: [{ type: "wages", amount: 150_000, period: "monthly" }] }),
+        member("child"),
+      ],
+    };
+
+    const programIds = screen(agesUnknown, ASOF, 0).programs.map((program) => program.programId);
+    expect(programIds).not.toContain("husky-a");
+    expect(programIds).not.toContain("husky-d");
+  });
+
+  it("extends the 138% limit table past the eight sizes CT DSS tabulates, at its own increment", () => {
+    // Nine members: self plus eight dependent children. The tabulated size-8
+    // parent line is $6,408/month; the size-9 line extends it by the table's
+    // own $653 increment (`programs/husky.ts`) to $7,061. $7,000/month clears
+    // the extended line but not the tabulated one — the assertion that would
+    // have caught this module reusing the 100%-FPL "+$473" figure instead.
+    const nine: HouseholdProfile = {
+      members: [
+        member("self", { age: 35, incomeSources: [{ type: "wages", amount: 700_000, period: "monthly" }] }),
+        ...Array.from({ length: 8 }, (_, index) => member(`child-${index}`, { age: 5, incomeSources: [] })),
+      ],
+    };
+
+    const huskyA = screen(nine, ASOF, 0).programs.find((program) => program.programId === "husky-a")!;
+    expect(huskyA.outcome).toBe("likely-eligible");
+    expect(huskyA.unit).toContain("self");
+  });
+});
+
+describe("Care 4 Kids: waitlisted, never a figure", () => {
+  it("waitlists a qualifying household rather than pricing it", () => {
+    const care4Kids = screen(mariaBeforeHerMother, ASOF, 0).programs.find(
+      (program) => program.programId === "care-4-kids",
+    )!;
+
+    expect(care4Kids).toEqual({
+      programId: "care-4-kids",
+      outcome: "likely-eligible",
+      unit: ["child-1", "child-2"],
+      noFigureReason: "waitlisted",
+      waitlist: { typicalWaitMonths: 8, invitingApplicationsReceivedBy: "2025-09-15" },
+      blockedBy: [],
+    });
+  });
+
+  it("never carries a figure, and never contributes to the headline", () => {
+    const result = screen(mariaBeforeHerMother, ASOF, 0);
+    const care4Kids = result.programs.find((program) => program.programId === "care-4-kids")!;
+
+    expect(care4Kids.figures).toBeUndefined();
+    // SNAP's and CEAP's figures only — the exact figure asserted in "computes
+    // the whole chain for Maria before her mother" above.
+    expect(result.headlineAnnualTotal).toBe(764_600);
+  });
+
+  it("requires a qualifying child: under 13, or under 19 with special needs", () => {
+    const teenNoSpecialNeeds: HouseholdProfile = {
+      members: [
+        member("self", { age: 35, incomeSources: [{ type: "wages", amount: 200_000, period: "monthly" }] }),
+        member("teen", { age: 15, hasDisability: false }),
+      ],
+    };
+
+    expect(
+      screen(teenNoSpecialNeeds, ASOF, 0).programs.map((program) => program.programId),
+    ).not.toContain("care-4-kids");
+
+    const teenWithSpecialNeeds = {
+      ...teenNoSpecialNeeds,
+      members: [teenNoSpecialNeeds.members[0]!, { ...teenNoSpecialNeeds.members[1]!, hasDisability: true }],
+    };
+
+    const care4Kids = screen(teenWithSpecialNeeds, ASOF, 0).programs.find(
+      (program) => program.programId === "care-4-kids",
+    )!;
+    expect(care4Kids.outcome).toBe("likely-eligible");
+    expect(care4Kids.unit).toEqual(["teen"]);
+  });
+
+  it("asks about disability only when a younger child hasn't already settled it", () => {
+    // An 8-year-old already qualifies on age alone, so the unresolved
+    // 15-year-old's disability status never reaches Care 4 Kids' own agenda —
+    // the same ordering `vulnerabilityOf` uses in `programs/ceap.ts`. CEAP
+    // itself still wants `disability` for this household (nobody here is
+    // 60+ or under 6 either), so the assertion checks specifically whether
+    // `care-4-kids` is one of the Programs the fact is blocking, not merely
+    // whether the fact appears at all.
+    const blockedByDisability = (profile: HouseholdProfile) =>
+      screen(profile, ASOF, 0).blockingFacts.find((fact) => fact.factId === "disability")?.blocks ?? [];
+
+    const youngerChildSettlesIt: HouseholdProfile = {
+      members: [
+        member("self", { age: 35, incomeSources: [{ type: "wages", amount: 200_000, period: "monthly" }] }),
+        member("child", { age: 8, incomeSources: [] }),
+        member("teen", { age: 15 }),
+      ],
+    };
+
+    expect(blockedByDisability(youngerChildSettlesIt)).not.toContain("care-4-kids");
+    expect(blockedByDisability(youngerChildSettlesIt)).toContain("ceap");
+
+    const onlyTheTeen: HouseholdProfile = {
+      members: [
+        member("self", { age: 35, incomeSources: [{ type: "wages", amount: 200_000, period: "monthly" }] }),
+        member("teen", { age: 15 }),
+      ],
+    };
+
+    expect(blockedByDisability(onlyTheTeen)).toContain("care-4-kids");
+  });
+
+  it("requires a working parent, and does not detect a studying one", () => {
+    // The same household as Maria's, but her only income is unearned — no
+    // wages, no self-employment. Care 4 Kids has no way to tell a studying
+    // parent from a non-working one, so this screens likely-ineligible: a
+    // named limitation (`programs/care-4-kids.ts`), not a silent one.
+    const noEarnedIncome: HouseholdProfile = {
+      ...mariaBeforeHerMother,
+      members: [
+        member("self", {
+          age: 31,
+          incomeSources: [{ type: "social-security", amount: 207_200, period: "monthly" }],
+        }),
+        member("child-1", { age: 9 }),
+        member("child-2", { age: 4 }),
+      ],
+    };
+
+    const care4Kids = screen(noEarnedIncome, ASOF, 0).programs.find(
+      (program) => program.programId === "care-4-kids",
+    )!;
+    expect(care4Kids.outcome).toBe("likely-ineligible");
+  });
+
+  it("screens income against 60% of State Median Income, the same ceiling Care 4 Kids' own income guidelines use", () => {
+    const overCeiling: HouseholdProfile = {
+      members: [
+        member("self", {
+          age: 35,
+          incomeSources: [{ type: "wages", amount: Math.ceil(7_715_700 / 12) + 1, period: "monthly" }],
+        }),
+        member("child", { age: 4, incomeSources: [] }),
+        member("other", { incomeSources: [] }),
+      ],
+    };
+
+    const care4Kids = screen(overCeiling, ASOF, 0).programs.find(
+      (program) => program.programId === "care-4-kids",
+    )!;
+    expect(care4Kids.outcome).toBe("likely-ineligible");
+    expect(care4Kids.figures).toBeUndefined();
+  });
+
+  it("falls off the map outside its FFY2026 window, rather than guessing a later one", () => {
+    expect(
+      screen(mariaBeforeHerMother, "2026-10-01", 0).programs.map((program) => program.programId),
+    ).not.toContain("care-4-kids");
   });
 });
